@@ -1,0 +1,3 @@
+Some ideas :
+- implement interactions (propagate input events on squint's window into the second screen)
+- support Wayland (sometime in the future)

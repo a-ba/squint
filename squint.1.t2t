@@ -1,0 +1,83 @@
+SQUINT
+
+Oct, 2013
+
+%!target: man
+%!encoding: UTF-8
+
+%!postproc(man): ' \(#\w+\)' ''
+
+%!options(html): --mask-email --toc
+%!postproc(html): <HEAD> '<HEAD>\n<STYLE>body{margin:3em;} pre{background:#ffc;}</STYLE>'
+
+= NAME =[name]
+
+squint - duplicate a monitor output into a X11 window
+
+= SYNOPSIS =[synopsis]
+
+**squint** [ MONITOR_NAME ]
+
+= DESCRIPTION =[description]
+
+**squint** is command that duplicates the output of a monitor into a X11
+window.
+
+The very purpose of such a gadget is to allow displaying a presentation (or
+making any kind of demonstration) on multiple monitors in the same time
+//without cloning the entire screen//.
+
+Your laptop panel remains fully available to do any kind of work. You can
+switch back and forth between the two screens just by minimising and restoring
+**squint**'s window.
+
+= USAGE =
+
+By default **squint** assumes that the external screen is the monitor having
+the smallest resolution. This should be the most typical configuration
+(duplicating a monitor into a smaller one looks less interesting). If you are
+in that case, then you just need to run the command without any parameter:
+
+```
+	squint
+```
+
+If the monitor you wish to duplicate is not the smallest one or if there is
+only one monitor (maybe you enjoy the Larsen effect), then you need to state
+which monitor (as listed by the **xrandr** command) shall be duplicated.
+
+```
+	squint HDMI1
+```
+
+The window displayed by **squint** provides no interactions at all, it is just
+a view of the monitor output. In order to interact with the content displayed
+in this monitor, the pointer must be moved into this monitor.
+
+
+= AUTHOR =[author]
+
+Anthony Baire <ayba@free.fr>
+
+= BUGS =[bugs]
+
+https://bitbucket.org/a_ba/squint/issues
+
+= COPYRIGHT =[copyright]
+
+Copyright (C) 2013 Anthony Baire
+
+= LICENSE =[license]
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program.  If not, see <http://www.gnu.org/licenses/>.
+

@@ -1,0 +1,67 @@
+INTRODUCTION
+
+	squint is command that duplicates the output of a monitor into a X11
+	window.
+
+
+	The  very  purpose of such a gadget is to allow displaying a
+	presentation (or making any kind of demonstration) on multiple monitors
+	in the same time without cloning the entire screen.
+
+
+	Your laptop panel remains fully available to do any kind of work. You
+	can switch back and forth  between  the  two screens just by minimising
+	and restoring squint's window.
+
+REQUIREMENTS
+	
+	- gtk+  (version 2 or 3)	
+
+	- python
+
+	- txt2tags gzip  (optional, needed for the man page)
+
+INSTALLATION
+
+	The build script is based on *waf*. To build squint, you need to run:
+
+		./waf configure
+		./waf
+	
+	Then, as root:
+
+		./waf install
+
+	By default squint is installed into /usr/local. You can configure this
+	with the --prefix option when running "./waf configure"
+
+	For more details run "./waf --help" or check the documentation at:
+	http://docs.waf.googlecode.com/git/book_17/single.html
+	
+USAGE
+	See the man page
+
+HOMEPAGE
+	https://bitbucket.org/a_ba/squint
+
+
+COPYRIGHT
+	(C) 2013 Anthony Baire
+
+
+LICENSE
+
+	This program is free software: you can redistribute it and/or modify it
+	under the terms of the GNU General Public License as published by the
+	Free Software Foundation, either version 3 of the License, or (at your
+	option) any later version.
+
+
+	This program is distributed in the hope that it will be useful, but
+	WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+	General Public License for more details.
+
+
+	You should have received a copy of the GNU General Public License along
+	with this program. If not, see <http://www.gnu.org/licenses/>.
