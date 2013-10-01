@@ -1,0 +1,150 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML><HEAD><TITLE>Man page of SQUINT</TITLE>
+</HEAD><BODY>
+<H1>SQUINT</H1>
+Section: User Commands  (1)<BR>Updated: Oct, 2013<BR><A HREF="#index">Index</A>
+<A HREF="/cgi-bin/man/man2html">Return to Main Contents</A><HR>
+
+<P>
+<P>
+<A NAME="lbAB">&nbsp;</A>
+<H2>NAME</H2>
+
+<P>
+<P>
+
+squint - duplicate a monitor output into a X11 window
+<P>
+<A NAME="lbAC">&nbsp;</A>
+<H2>SYNOPSIS</H2>
+
+<P>
+<P>
+
+<B>squint</B> [ MONITOR_NAME ]
+<P>
+<A NAME="lbAD">&nbsp;</A>
+<H2>DESCRIPTION</H2>
+
+<P>
+<P>
+
+<B>squint</B> is command that duplicates the output of a monitor into a X11
+window.
+<P>
+<P>
+
+The very purpose of such a gadget is to allow displaying a presentation (or
+making any kind of demonstration) on multiple monitors in the same time
+<I>without cloning the entire screen</I>.
+<P>
+<P>
+
+Your laptop panel remains fully available to do any kind of work. You can
+switch back and forth between the two screens just by minimising and restoring
+<B>squint</B>'s window.
+<P>
+<A NAME="lbAE">&nbsp;</A>
+<H2>USAGE</H2>
+
+<P>
+<P>
+
+By default <B>squint</B> assumes that the external screen is the monitor having
+the smallest resolution. This should be the most typical configuration
+(duplicating a monitor into a smaller one looks less interesting). If you are
+in that case, then you just need to run the command without any parameter:
+<P>
+<PRE>
+        squint
+</PRE>
+
+<P>
+<P>
+<P>
+
+If the monitor you wish to duplicate is not the smallest one or if there is
+only one monitor (maybe you enjoy the Larsen effect), then you need to state
+which monitor (as listed by the <B>xrandr</B> command) shall be duplicated.
+<P>
+<PRE>
+        squint HDMI1
+</PRE>
+
+<P>
+<P>
+<P>
+
+The window displayed by <B>squint</B> provides no interactions at all, it is just
+a view of the monitor output. In order to interact with the content displayed
+in this monitor, the pointer must be moved into this monitor.
+<P>
+<A NAME="lbAF">&nbsp;</A>
+<H2>AUTHOR</H2>
+
+<P>
+<P>
+
+Anthony Baire &lt;<A HREF="mailto:ayba@free.fr">ayba@free.fr</A>&gt;
+<P>
+<A NAME="lbAG">&nbsp;</A>
+<H2>BUGS</H2>
+
+<P>
+<P>
+
+<A HREF="https://bitbucket.org/a_ba/squint/issues">https://bitbucket.org/a_ba/squint/issues</A>
+<P>
+<A NAME="lbAH">&nbsp;</A>
+<H2>COPYRIGHT</H2>
+
+<P>
+<P>
+
+Copyright (C) 2013 Anthony Baire
+<P>
+<A NAME="lbAI">&nbsp;</A>
+<H2>LICENSE</H2>
+
+<P>
+<P>
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+<P>
+<P>
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+<P>
+<P>
+
+You should have received a copy of the GNU General Public License along with
+this program.  If not, see &lt;<A HREF="http://www.gnu.org/licenses/">http://www.gnu.org/licenses/</A>&gt;.
+<P>
+
+
+<P>
+
+<HR>
+<A NAME="index">&nbsp;</A><H2>Index</H2>
+<DL>
+<DT><A HREF="#lbAB">NAME</A><DD>
+<DT><A HREF="#lbAC">SYNOPSIS</A><DD>
+<DT><A HREF="#lbAD">DESCRIPTION</A><DD>
+<DT><A HREF="#lbAE">USAGE</A><DD>
+<DT><A HREF="#lbAF">AUTHOR</A><DD>
+<DT><A HREF="#lbAG">BUGS</A><DD>
+<DT><A HREF="#lbAH">COPYRIGHT</A><DD>
+<DT><A HREF="#lbAI">LICENSE</A><DD>
+</DL>
+<HR>
+This document was created by
+<A HREF="/cgi-bin/man/man2html">man2html</A>,
+using the manual pages.<BR>
+Time: 07:52:50 GMT, October 01, 2013
+</BODY>
+</HTML>
