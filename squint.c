@@ -21,7 +21,7 @@ GC gc_white = NULL;
 Display* display = NULL;
 int raised = 0;
 
-int opt_full = 0;
+int opt_full = 1;
 
 GdkRectangle rect, offset;
 
@@ -146,10 +146,10 @@ refresh_image (gpointer data)
 void print_help()
 {
 	printf(
-		"usage: squint [-f] [MonitorName]\n"
+		"usage: squint [-w] [MonitorName]\n"
 		"\n"
 		"	MonitorName	name of the monitor to be duplicated (from xrandr)\n"
-		"	-f		run in fullscreen mode\n"
+		"	-w		run inside a window instead of going fullscreen\n"
 	);
 	exit(1);
 }
@@ -162,12 +162,12 @@ main (int argc, char *argv[])
 	gtk_init (&argc, &argv);
 
 	int opt;
-	while ((opt = getopt(argc, argv, "f")) != -1)
+	while ((opt = getopt(argc, argv, "w")) != -1)
 	{
 		switch(opt)
 		{
-		case 'f':
-			opt_full = 1;
+		case 'w':
+			opt_full = 0;
 			break;
 		default:
 			print_help();
@@ -247,11 +247,6 @@ main (int argc, char *argv[])
 
 	window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 	
-	if (opt_full) {
-		// black background
-		GdkRGBA black = {0,0,0,1};
-		gtk_widget_override_background_color(window, 0, &black);
-	}
 	{
 		// load the icon
 		GError* err = NULL;
@@ -323,20 +318,33 @@ main (int argc, char *argv[])
 	offset.x = 0;
 	offset.y = 0;
 	if (opt_full) {
-		// go full screen
-		gdk_window_fullscreen (gdkwin);
-
-		// adjust the offset to draw the screen in the center of the window
+		// get the monitor on which the window is displayed
 		int mon = gdk_screen_get_monitor_at_window(gscreen, gdkwin);
 		GdkRectangle wa;
 		gdk_screen_get_monitor_workarea(gscreen, mon, &wa);
-		int margin_x = wa.width - rect.width;
-		if (margin_x > 0) {
-			offset.x = margin_x / 2;
-		}
-		int margin_y = wa.height - rect.height;
-		if (margin_y > 0) {
-			offset.y = margin_y /2;
+
+		if ((rect.x == wa.x) && (rect.y == wa.y)) {
+			// same as the source monitor
+			// -> do NOT go fullscreen
+			opt_full = 0;
+			fprintf(stderr, "error: cannot duplicate the output on the same monitor, falling back to window mode\n");
+		} else {
+			// black background
+			GdkRGBA black = {0,0,0,1};
+			gtk_widget_override_background_color(window, 0, &black);
+
+			// go full screen
+			gdk_window_fullscreen (gdkwin);
+
+			// adjust the offset to draw the screen in the center of the window
+			int margin_x = wa.width - rect.width;
+			if (margin_x > 0) {
+				offset.x = margin_x / 2;
+			}
+			int margin_y = wa.height - rect.height;
+			if (margin_y > 0) {
+				offset.y = margin_y /2;
+			}
 		}
 	}
 
