@@ -8,9 +8,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 
-Window my_w = 0;
+GtkWidget* window = NULL;
+GdkWindow* gdkwin = NULL;
 Window root_window = 0;
 Pixmap pixmap = -1;
 int depth = -1, screen = -1;
@@ -18,6 +20,8 @@ GC gc = NULL;
 GC gc_white = NULL;
 Display* display = NULL;
 int raised = 0;
+
+int opt_full = 0;
 
 GdkRectangle rect;
 
@@ -29,6 +33,41 @@ xerror (const char* msg, Display* display, int code)
 	XGetErrorText (display, code, buff, 128);
 
 	fprintf (stderr, "%s: %s\n", msg, buff);
+}
+
+void show()
+{
+	if (!raised)
+	{
+		raised = 1;
+		gdk_window_raise(gdkwin);
+		if (opt_full) {
+			gdk_window_fullscreen(gdkwin);
+		}
+	}
+}
+
+void do_hide()
+{
+	raised = 0;
+	if (opt_full) {
+		gdk_window_unfullscreen(gdkwin);
+	}
+	gdk_window_lower(gdkwin);
+}
+
+void hide()
+{
+	if(raised)
+	{
+		do_hide();
+	}
+}
+
+gboolean on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
+{
+	do_hide();
+	return FALSE;
 }
 
 gboolean
@@ -76,7 +115,9 @@ refresh_image (gpointer data)
 		}
 	}
 
-	switch (code = XCopyArea (display, pixmap, my_w, gc,
+	switch (code = XCopyArea (display, pixmap,
+					GDK_WINDOW_XID(gdkwin),
+					gc,
 					0, 0,
 					rect.width, rect.height,
 					0, 0))
@@ -89,16 +130,12 @@ refresh_image (gpointer data)
 		exit(2);
 	}
 
-	if (inside_rect && !raised) {
+	if (inside_rect) {
 		/* raise the window when the pointer enters the duplicated screen */
-		raised = 1;
-		int v = XRaiseWindow(display, my_w);
-		printf("raise %d", v);
-	} else if (!inside_rect && raised) {
+		show();
+	} else {
 		/* lower the window when the pointer leaves the duplicated screen */
-		raised = 0;
-		int v = XLowerWindow(display, my_w);
-		printf("lower %d", v);
+		hide();
 	}	
 
 	XFlush (display);
@@ -106,27 +143,47 @@ refresh_image (gpointer data)
 	return TRUE;
 }
 
-
+void print_help()
+{
+	printf(
+		"usage: squint [-f] [MonitorName]\n"
+		"\n"
+		"	MonitorName	name of the monitor to be duplicated (from xrandr)\n"
+		"	-f		run in fullscreen mode\n"
+	);
+	exit(1);
+}
 
 int
 main (int argc, char *argv[])
 {
-	GtkWidget *window;
 	const char* monitor_name;
 
 	gtk_init (&argc, &argv);
 
-	switch (argc)
+	int opt;
+	while ((opt = getopt(argc, argv, "f")) != -1)
 	{
-		case 1:
-			monitor_name = NULL;
-			break;
-		case 2:
-			monitor_name = argv[1];
+		switch(opt)
+		{
+		case 'f':
+			opt_full = 1;
 			break;
 		default:
-			fprintf (stderr, "usage: %s [MonitorName]\n", argv[0]);
-			return 1;
+			print_help();
+		}
+	}
+
+	switch (argc-optind)
+	{
+		case 0:
+			monitor_name = NULL;
+			break;
+		case 1:
+			monitor_name = argv[optind];
+			break;
+		default:
+			print_help();
 	}
 
 	GdkDisplay* gdisplay = gdk_display_get_default();
@@ -189,7 +246,12 @@ main (int argc, char *argv[])
 
 
 	window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-
+	
+	if (opt_full) {
+		// black background
+		GdkRGBA black = {0,0,0,1};
+		gtk_widget_override_background_color(window, 0, &black);
+	}
 	{
 		// load the icon
 		GError* err = NULL;
@@ -203,8 +265,6 @@ main (int argc, char *argv[])
 			g_error_free (err);
 		}
 	}
-
-	g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
 
 	display = gdk_x11_get_default_xdisplay();
 	//printf("display: %p\n", display);
@@ -255,10 +315,21 @@ main (int argc, char *argv[])
 		//printf("gc_white: %d\n", gc_white);
 	}
 
+	if (opt_full) {
+		gtk_window_fullscreen (GTK_WINDOW(window));
+	}
+
 	// create my own window
 	gtk_widget_show_all (window);
-//	my_w = XCreateSimpleWindow (display, root_window, 40, 40, 512, 512, 1, 0, 0xffffff);
-	my_w = GDK_WINDOW_XID(gtk_widget_get_window (window));
+
+	gdkwin = gtk_widget_get_window(window);
+
+	// quit on window closed
+	g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
+
+	// hide the window on click
+	g_signal_connect (window, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
+	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, rect.width, rect.height, depth);

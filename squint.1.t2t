@@ -16,7 +16,7 @@ squint - duplicate a monitor output into a X11 window
 
 = SYNOPSIS =[synopsis]
 
-**squint** [ MONITOR_NAME ]
+**squint** [ -f ] [ MONITOR_NAME ]
 
 = DESCRIPTION =[description]
 
@@ -30,6 +30,11 @@ making any kind of demonstration) on multiple monitors in the same time
 Your laptop panel remains fully available to do any kind of work. You can
 switch back and forth between the two screens just by minimising and restoring
 **squint**'s window.
+
+= OPTIONS =
+: **-f**
+fullscreen mode
+:
 
 = USAGE =
 
