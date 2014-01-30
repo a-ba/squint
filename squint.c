@@ -17,6 +17,7 @@ int depth = -1, screen = -1;
 GC gc = NULL;
 GC gc_white = NULL;
 Display* display = NULL;
+int raised = 0;
 
 GdkRectangle rect;
 
@@ -34,6 +35,8 @@ gboolean
 refresh_image (gpointer data)
 {
 	int code;
+	int inside_rect=0;
+
 	switch (code = XCopyArea (display, root_window, pixmap, gc,
 					rect.x, rect.y,
 					rect.width, rect.height,
@@ -62,6 +65,8 @@ refresh_image (gpointer data)
 			if (	(x>=0) && (x< rect.width) &&
 				(y>=0) && (y< rect.height)	)
 			{
+				inside_rect = 1;
+
 				#define LEN 3
 				XDrawLine (display, pixmap, gc_white, x-(LEN+1), y, x+(LEN+2), y);
 				XDrawLine (display, pixmap, gc_white, x, y-(LEN+1), x, y+(LEN+2));
@@ -83,6 +88,18 @@ refresh_image (gpointer data)
 		xerror ("XCopyArea() failed", display, code);
 		exit(2);
 	}
+
+	if (inside_rect && !raised) {
+		/* raise the window when the pointer enters the duplicated screen */
+		raised = 1;
+		int v = XRaiseWindow(display, my_w);
+		printf("raise %d", v);
+	} else if (!inside_rect && raised) {
+		/* lower the window when the pointer leaves the duplicated screen */
+		raised = 0;
+		int v = XLowerWindow(display, my_w);
+		printf("lower %d", v);
+	}	
 
 	XFlush (display);
 
