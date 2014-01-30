@@ -23,7 +23,7 @@ int raised = 0;
 
 int opt_full = 0;
 
-GdkRectangle rect;
+GdkRectangle rect, offset;
 
 void
 xerror (const char* msg, Display* display, int code)
@@ -120,7 +120,7 @@ refresh_image (gpointer data)
 					gc,
 					0, 0,
 					rect.width, rect.height,
-					0, 0))
+					offset.x, offset.y))
 	{
 	case BadDrawable:
 	case BadGC:
@@ -315,14 +315,30 @@ main (int argc, char *argv[])
 		//printf("gc_white: %d\n", gc_white);
 	}
 
-	if (opt_full) {
-		gtk_window_fullscreen (GTK_WINDOW(window));
-	}
-
 	// create my own window
 	gtk_widget_show_all (window);
 
 	gdkwin = gtk_widget_get_window(window);
+
+	offset.x = 0;
+	offset.y = 0;
+	if (opt_full) {
+		// go full screen
+		gdk_window_fullscreen (gdkwin);
+
+		// adjust the offset to draw the screen in the center of the window
+		int mon = gdk_screen_get_monitor_at_window(gscreen, gdkwin);
+		GdkRectangle wa;
+		gdk_screen_get_monitor_workarea(gscreen, mon, &wa);
+		int margin_x = wa.width - rect.width;
+		if (margin_x > 0) {
+			offset.x = margin_x / 2;
+		}
+		int margin_y = wa.height - rect.height;
+		if (margin_y > 0) {
+			offset.y = margin_y /2;
+		}
+	}
 
 	// quit on window closed
 	g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
