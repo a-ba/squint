@@ -196,7 +196,7 @@ main (int argc, char *argv[])
 	{
 		int n = gdk_screen_get_n_monitors (gscreen);
 		if ((n < 2) && !monitor_name) {
-			fprintf (stderr, "error: you do not have multiple monitors\n");
+			fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
 			return 1;
 		}
 

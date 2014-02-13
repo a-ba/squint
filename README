@@ -6,12 +6,8 @@ INTRODUCTION
 
 	The  very  purpose of such a gadget is to allow displaying a
 	presentation (or making any kind of demonstration) on multiple monitors
-	in the same time without cloning the entire screen.
-
-
-	Your laptop panel remains fully available to do any kind of work. You
-	can switch back and forth  between  the  two screens just by minimising
-	and restoring squint's window.
+	in the same time without cloning the entire screen. The laptop's panel
+	remains fully available to do any other stuff. 
 
 REQUIREMENTS
 	
@@ -46,7 +42,7 @@ HOMEPAGE
 
 
 COPYRIGHT
-	(C) 2013 Anthony Baire
+	(C) 2013, 2014 Anthony Baire
 
 
 LICENSE

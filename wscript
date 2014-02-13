@@ -38,6 +38,11 @@ def build (bld):
 			source="squint.1.t2t",
 			rule="${TXT2TAGS} -o - -t man '${SRC}' | ${GZIP} > '${TGT}'",
 		)
+		bld(
+			target="squint.1.html",
+			source="squint.1.t2t",
+			rule="${TXT2TAGS} -o - -t html '${SRC}' > '${TGT}'",
+		)
 
 		bld.install_as("${PREFIX}/share/man/man1/squint.1.gz", "squint.1.gz")
 
