@@ -149,6 +149,7 @@ void print_help()
 		"usage: squint [-w] [MonitorName]\n"
 		"\n"
 		"	MonitorName	name of the monitor to be duplicated (from xrandr)\n"
+		"	-v		display version information and exit\n"
 		"	-w		run inside a window instead of going fullscreen\n"
 	);
 	exit(1);
@@ -162,10 +163,13 @@ main (int argc, char *argv[])
 	gtk_init (&argc, &argv);
 
 	int opt;
-	while ((opt = getopt(argc, argv, "w")) != -1)
+	while ((opt = getopt(argc, argv, "vw")) != -1)
 	{
 		switch(opt)
 		{
+		case 'v':
+			puts(APPNAME " " VERSION);
+			return 0;
 		case 'w':
 			opt_full = 0;
 			break;

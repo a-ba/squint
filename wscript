@@ -14,6 +14,9 @@ def options (ctx):
 
 def configure (conf):
 	conf.load ("compiler_c")
+	
+	conf.define("APPNAME", APPNAME);
+	conf.define("VERSION", VERSION);
 
 	conf.define("PREFIX", conf.env.PREFIX)
 	if not	conf.check_cfg(package="gtk+-3.0", args="--cflags --libs", uselib_store="GTK", mandatory = False):
