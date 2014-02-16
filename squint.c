@@ -4,6 +4,9 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include <X11/Xlib.h>          /* of course */
+#ifdef HAVE_XI
+#include <X11/extensions/XInput2.h>
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +29,13 @@ int opt_full = 1;
 
 GdkRectangle rect;
 GdkPoint offset;
+GdkPoint cursor = {0, 0};
+int cursor_inside_rect = 0;
+
+#ifdef HAVE_XI
+int track_cursor = 0;
+int xi_opcode = 0;
+#endif
 
 void show()
 {
@@ -62,58 +72,127 @@ gboolean on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpoint
 	return FALSE;
 }
 
-gboolean
-refresh_image (gpointer data)
+void refresh_cursor_location()
 {
-	int code;
-	int inside_rect=0;
+	Window root_return, w;
+	int wx, wy, mask;
+	GdkPoint c;
+	XQueryPointer(display, root_window, &root_return, &w,
+			&c.x, &c.y, &wx, &wy, &mask);
 
-	XCopyArea (display, root_window, pixmap, gc,
-					rect.x, rect.y,
-					rect.width, rect.height,
-					0, 0);
+	c.x -= rect.x;
+	c.y -= rect.y;
+
+	if ((c.x<0) | (c.y<0) | (c.x>=rect.width) | (c.y>=rect.height))
 	{
-		Window root_return;
-		int x, y;
-		Window c;
-		int cx, cy;
-		int mask;
-		if ((XQueryPointer (display, root_window, &root_return, &c,
-				&x, &y, &cx, &cy, &mask)
-			== True) && (root_window == root_return))
-		{
-			x -= rect.x;
-			y -= rect.y;
-			if (	(x>=0) && (x< rect.width) &&
-				(y>=0) && (y< rect.height)	)
-			{
-				inside_rect = 1;
-
-				// draw the pointer (crosshair)
-				#define LEN 3
-				XDrawLine (display, pixmap, gc_white, x-(LEN+1), y, x+(LEN+2), y);
-				XDrawLine (display, pixmap, gc_white, x, y-(LEN+1), x, y+(LEN+2));
-				XDrawLine (display, pixmap, gc, x-LEN, y, x+LEN, y);
-				XDrawLine (display, pixmap, gc, x, y-LEN, x, y+LEN);
-			}
-		}
+		// cursor is outside the duplicated screen
+		c.x = c.y = -1;
 	}
 
-	// force refreshing the background of the window
-	XClearWindow(display, window);
+	if (memcmp(&cursor, &c, sizeof(cursor)) == 0) {
+		// nothing to do
+		return;
+	}
 
-	if (inside_rect) {
+	// cursor was really moved
+	cursor = c;
+
+	if (cursor.x >= 0) {
 		/* raise the window when the pointer enters the duplicated screen */
 		show();
 	} else {
 		/* lower the window when the pointer leaves the duplicated screen */
 		hide();
 	}	
+}
+
+gboolean
+refresh_image (gpointer data)
+{
+	int code;
+	int inside_rect=0;
+
+#ifdef HAVE_XI
+	if (!track_cursor)
+#endif
+	{
+		refresh_cursor_location();
+	}
+
+	XCopyArea (display, root_window, pixmap, gc,
+					rect.x, rect.y,
+					rect.width, rect.height,
+					0, 0);
+
+	// draw the cursor (crosshair)
+	if (cursor.x >= 0) {
+		#define LEN 3
+		XDrawLine (display, pixmap, gc_white, cursor.x-(LEN+1), cursor.y, cursor.x+(LEN+2), cursor.y);
+		XDrawLine (display, pixmap, gc_white, cursor.x, cursor.y-(LEN+1), cursor.x, cursor.y+(LEN+2));
+		XDrawLine (display, pixmap, gc, cursor.x-LEN, cursor.y, cursor.x+LEN, cursor.y);
+		XDrawLine (display, pixmap, gc, cursor.x, cursor.y-LEN, cursor.x, cursor.y+LEN);
+	}
+
+	// force refreshing the window's background
+	XClearWindow(display, window);
+
 
 	XFlush (display);
 
 	return TRUE;
 }
+
+GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
+{
+	XEvent* ev = (XEvent*)xevent;
+	XGenericEventCookie *cookie = &ev->xcookie;
+
+#ifdef HAVE_XI
+	if(track_cursor)
+	{
+		if (	(cookie->type == GenericEvent)
+		    &&	(cookie->extension == xi_opcode)
+		    &&	(cookie->evtype == XI_RawMotion))
+		{
+			// cursor was moved
+			refresh_cursor_location();
+		}
+	}
+#endif
+
+	return GDK_FILTER_CONTINUE;
+}
+
+#ifdef HAVE_XI
+void init_cursor_tracking()
+{
+	// inspired from: http://keithp.com/blogs/Cursor_tracking/
+	
+	int event, error;
+	if (!XQueryExtension(display, "XInputExtension", &xi_opcode, &event, &error))
+		return;
+	
+
+	int major=2, minor=2;
+	if (XIQueryVersion(display, &major, &minor) != Success)
+		return;
+
+	XIEventMask evmasks[1];
+	unsigned char mask1[(XI_LASTEVENT + 7)/8];
+	memset(mask1, 0, sizeof(mask1));
+
+	// select for button and key events from all master devices
+	XISetMask(mask1, XI_RawMotion);
+
+	evmasks[0].deviceid = XIAllMasterDevices;
+	evmasks[0].mask_len = sizeof(mask1);
+	evmasks[0].mask = mask1;
+
+	XISelectEvents(display, root_window, evmasks, 1);
+
+	track_cursor = 1;
+}
+#endif
 
 void print_help()
 {
@@ -330,7 +409,9 @@ main (int argc, char *argv[])
 		XMapWindow(display, window);
 	}
 
-
+#ifdef HAVE_XI
+	init_cursor_tracking();
+#endif
 
 	XFlush (display);
 
@@ -343,6 +424,8 @@ main (int argc, char *argv[])
 	g_value_set_int (&v, rect.height);
 	g_object_set_property (G_OBJECT(gtkwin), "height-request", &v);
 
+	// catch all X11 events
+	gdk_window_add_filter(NULL, on_x11_event, NULL);
 
 	g_timeout_add (40, &refresh_image, NULL);
 

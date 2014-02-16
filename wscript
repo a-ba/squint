@@ -21,6 +21,9 @@ def configure (conf):
 	conf.define("PREFIX", conf.env.PREFIX)
 	if not	conf.check_cfg(package="gtk+-3.0", args="--cflags --libs", uselib_store="GTK", mandatory = False):
 		conf.check_cfg(package="gtk+-2.0", args="--cflags --libs", uselib_store="GTK")
+	
+	conf.check_cfg(package="xi", args="--cflags --libs", uselib_store="XI",
+			atleast_version="1.5", mandatory=False)
 
 	conf.find_program("txt2tags", mandatory=False)
 	conf.find_program("gzip", mandatory=False)
@@ -30,7 +33,7 @@ def build (bld):
 	bld.program(
 		target="squint",
 		source="squint.c",
-		uselib="GTK"
+		uselib="GTK XI"
 	)
 
 	bld.install_as("${PREFIX}/share/squint/squint.png", "squint.png")
