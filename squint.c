@@ -24,7 +24,8 @@ int raised = 0;
 
 int opt_full = 1;
 
-GdkRectangle rect, offset;
+GdkRectangle rect;
+GdkPoint offset;
 
 void show()
 {
