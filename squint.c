@@ -178,7 +178,10 @@ refresh_image (gpointer data)
 					0, 0);
 
 	// draw the cursor (crosshair)
-	if (!copy_cursor && (cursor.x >= 0)) {
+#ifdef COPY_CURSOR
+	if (!copy_cursor)
+#endif
+	if (cursor.x >= 0) {
 		#define LEN 3
 		XDrawLine (display, pixmap, gc_white, cursor.x-(LEN+1), cursor.y, cursor.x+(LEN+2), cursor.y);
 		XDrawLine (display, pixmap, gc_white, cursor.x, cursor.y-(LEN+1), cursor.x, cursor.y+(LEN+2));
