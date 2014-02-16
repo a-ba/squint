@@ -26,16 +26,6 @@ int opt_full = 1;
 
 GdkRectangle rect, offset;
 
-void
-xerror (const char* msg, Display* display, int code)
-{
-	char buff[128];
-
-	XGetErrorText (display, code, buff, 128);
-
-	fprintf (stderr, "%s: %s\n", msg, buff);
-}
-
 void show()
 {
 	if (!raised)
@@ -77,19 +67,10 @@ refresh_image (gpointer data)
 	int code;
 	int inside_rect=0;
 
-	switch (code = XCopyArea (display, root_window, pixmap, gc,
+	XCopyArea (display, root_window, pixmap, gc,
 					rect.x, rect.y,
 					rect.width, rect.height,
-					0, 0))
-	{
-	case BadDrawable:
-	case BadGC:
-	case BadMatch:
-	case BadValue:
-		xerror ("XCopyArea() failed", display, code);
-		exit(2);
-	}
-
+					0, 0);
 	{
 		Window root_return;
 		int x, y;
@@ -107,6 +88,7 @@ refresh_image (gpointer data)
 			{
 				inside_rect = 1;
 
+				// draw the pointer (crosshair)
 				#define LEN 3
 				XDrawLine (display, pixmap, gc_white, x-(LEN+1), y, x+(LEN+2), y);
 				XDrawLine (display, pixmap, gc_white, x, y-(LEN+1), x, y+(LEN+2));
@@ -271,36 +253,18 @@ main (int argc, char *argv[])
 		values.subwindow_mode = IncludeInferiors;
 
 		gc = XCreateGC (display, root_window, GCSubwindowMode, &values);
-		switch ((long)gc)
-		{
-		case BadAlloc:
-		case BadDrawable:
-		case BadFont:
-		case BadGC:
-		case BadMatch:
-		case BadPixmap:
-		case BadValue:
-			xerror ("XCreateGC() failed", display, (long)gc);
+		if(!gc) {
+			error ("XCreateGC() failed");
 			return 1;
 		}
-		//printf("gc: %d\n", gc);
 
 		values.line_width = 3;
 		values.foreground = 0xe0e0e0;
 		gc_white = XCreateGC (display, root_window, GCLineWidth | GCForeground, &values);
-		switch ((long)gc_white)
-		{
-		case BadAlloc:
-		case BadDrawable:
-		case BadFont:
-		case BadGC:
-		case BadMatch:
-		case BadPixmap:
-		case BadValue:
-			xerror ("XCreateGC() failed", display, (long)gc_white);
+		if(!gc_white) {
+			error ("XCreateGC() failed");
 			return 1;
 		}
-		//printf("gc_white: %d\n", gc_white);
 	}
 
 	// create my own window
@@ -350,16 +314,6 @@ main (int argc, char *argv[])
 
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, rect.width, rect.height, depth);
-	switch (pixmap)
-	{
-	case BadAlloc:
-	case BadDrawable:
-	case BadPixmap:
-	case BadValue:
-		xerror ("XCreatePixmap() failed", display, pixmap);
-		return 1;
-	}
-	//printf("pixmap: %p\n", pixmap);
 	
 	// create the sub-window
 	{
