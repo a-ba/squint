@@ -14,6 +14,7 @@
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
 Window root_window = 0;
+Window window = 0;
 Pixmap pixmap = -1;
 int depth = -1, screen = -1;
 GC gc = NULL;
@@ -115,20 +116,8 @@ refresh_image (gpointer data)
 		}
 	}
 
-	switch (code = XCopyArea (display, pixmap,
-					GDK_WINDOW_XID(gdkwin),
-					gc,
-					0, 0,
-					rect.width, rect.height,
-					offset.x, offset.y))
-	{
-	case BadDrawable:
-	case BadGC:
-	case BadMatch:
-	case BadValue:
-		xerror ("XCopyArea() failed", display, code);
-		exit(2);
-	}
+	// force refreshing the background of the window
+	XClearWindow(display, window);
 
 	if (inside_rect) {
 		/* raise the window when the pointer enters the duplicated screen */
@@ -371,6 +360,21 @@ main (int argc, char *argv[])
 		return 1;
 	}
 	//printf("pixmap: %p\n", pixmap);
+	
+	// create the sub-window
+	{
+		XSetWindowAttributes attr;
+		attr.background_pixmap = pixmap;
+		window = XCreateWindow (display,
+					gdk_x11_window_get_xid(gdkwin),
+					offset.x, offset.y,
+					rect.width, rect.height,
+					0, CopyFromParent,
+					InputOutput, CopyFromParent,
+					CWBackPixmap, &attr);
+		XMapWindow(display, window);
+	}
+
 
 
 	XFlush (display);
