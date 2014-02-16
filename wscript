@@ -25,6 +25,14 @@ def configure (conf):
 	conf.check_cfg(package="xi", args="--cflags --libs", uselib_store="XI",
 			atleast_version="1.5", mandatory=False)
 
+	if (
+		conf.check_cfg(package="xfixes", args="--cflags --libs",
+			uselib_store="XFIXES", mandatory=False) and
+		conf.check_cfg(package="xext", args="--cflags --libs",
+			uselib_store="XEXT", mandatory=False)
+	):
+		conf.define("COPY_CURSOR", 1)
+
 	conf.find_program("txt2tags", mandatory=False)
 	conf.find_program("gzip", mandatory=False)
 
@@ -33,7 +41,7 @@ def build (bld):
 	bld.program(
 		target="squint",
 		source="squint.c",
-		uselib="GTK XI"
+		uselib="GTK XI XFIXES XEXT"
 	)
 
 	bld.install_as("${PREFIX}/share/squint/squint.png", "squint.png")

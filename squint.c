@@ -7,7 +7,12 @@
 #ifdef HAVE_XI
 #include <X11/extensions/XInput2.h>
 #endif
+#ifdef COPY_CURSOR
+#include <X11/extensions/Xfixes.h>
+#include <X11/extensions/shape.h>
+#endif
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -27,15 +32,39 @@ int raised = 0;
 
 int opt_full = 1;
 
+
 GdkRectangle rect;
 GdkPoint offset;
 GdkPoint cursor = {0, 0};
-int cursor_inside_rect = 0;
 
 #ifdef HAVE_XI
 int track_cursor = 0;
 int xi_opcode = 0;
 #endif
+
+#ifdef COPY_CURSOR
+#define CURSOR_SIZE 64
+int xfixes_event_base;
+
+int copy_cursor = 0;
+Window cursor_window = 0;
+Pixmap cursor_pixmap = 0;
+XImage* cursor_image = NULL;
+Pixmap  cursor_mask_pixmap = 0;
+XImage* cursor_mask_image = NULL;
+GC	cursor_mask_gc = NULL;
+int cursor_xhot=0;
+int cursor_yhot=0;
+uint32_t cursor_pixels[CURSOR_SIZE*CURSOR_SIZE];
+uint8_t  cursor_mask_pixels[CURSOR_SIZE*CURSOR_SIZE];
+#endif
+
+
+void
+error (const char* msg)
+{
+	fprintf(stderr, "%s\n", msg);
+}
 
 void show()
 {
@@ -97,13 +126,25 @@ void refresh_cursor_location()
 	// cursor was really moved
 	cursor = c;
 
+#ifdef COPY_CURSOR
+	if (copy_cursor) {
+		// move the cursor window to the new location of the cursor
+		XMoveWindow (display, cursor_window,
+				cursor.x - cursor_xhot,
+				cursor.y - cursor_yhot);
+
+		// force redrawing the window
+		XClearWindow(display, cursor_window);
+	}
+#endif
+
 	if (cursor.x >= 0) {
 		/* raise the window when the pointer enters the duplicated screen */
 		show();
 	} else {
 		/* lower the window when the pointer leaves the duplicated screen */
 		hide();
-	}	
+	}
 }
 
 gboolean
@@ -125,7 +166,7 @@ refresh_image (gpointer data)
 					0, 0);
 
 	// draw the cursor (crosshair)
-	if (cursor.x >= 0) {
+	if (!copy_cursor && (cursor.x >= 0)) {
 		#define LEN 3
 		XDrawLine (display, pixmap, gc_white, cursor.x-(LEN+1), cursor.y, cursor.x+(LEN+2), cursor.y);
 		XDrawLine (display, pixmap, gc_white, cursor.x, cursor.y-(LEN+1), cursor.x, cursor.y+(LEN+2));
@@ -142,6 +183,133 @@ refresh_image (gpointer data)
 	return TRUE;
 }
 
+
+#ifdef COPY_CURSOR
+void refresh_cursor_image()
+{
+	XFixesCursorImage* img = XFixesGetCursorImage (display);
+	if (!img)
+		return;
+
+	int width  = (img->width  < CURSOR_SIZE) ? img->width  : CURSOR_SIZE;
+	int height = (img->height < CURSOR_SIZE) ? img->height : CURSOR_SIZE;
+
+	int x, y;
+	// copy the cursor image
+	for(x=0 ; x<width ; x++)
+	{
+		for(y=0 ; y<height ; y++)
+		{
+			cursor_pixels[y*CURSOR_SIZE + x] = img->pixels[y*img->width + x];
+		}
+	}
+
+	// copy the cursor mask
+	memset(cursor_mask_pixels, 0, sizeof(cursor_mask_pixels));
+	for(x=0 ; x<width ; x++)
+	{
+		for(y=0 ; y<height ; y++)
+		{
+			if(img->pixels[y*img->width + x] >> 24)
+			{
+				cursor_mask_pixels[y*(CURSOR_SIZE/8) + (x/8)] |= 1 << (x % 8);
+			}
+		}
+
+	}
+
+	// upload the image & mask
+	XPutImage(display, cursor_pixmap, XDefaultGC(display, screen),
+			cursor_image, 0, 0, 0, 0, width, height);
+	XPutImage(display, cursor_mask_pixmap, cursor_mask_gc,
+			cursor_mask_image, 0, 0, 0, 0, CURSOR_SIZE, CURSOR_SIZE);
+
+	// apply the new mask
+	XShapeCombineMask(display, cursor_window, ShapeBounding, 0, 0, cursor_mask_pixmap,
+			ShapeSet);
+
+	// force redrawing the cursor window
+	XClearWindow(display, cursor_window);
+
+	cursor_xhot = img->xhot;
+	cursor_yhot = img->yhot;
+
+	XFree(img);
+}
+
+void init_copy_cursor()
+{
+	// ensure we are in true color
+	if (XDefaultDepth(display, screen) != 24) {
+		return;
+	}
+
+	// check if xfixes and xshape are available on this display
+	int major, minor, error_base;
+	if ((	   !XFixesQueryExtension(display, &xfixes_event_base, &error_base)
+		|| !XFixesQueryVersion(display, &major, &minor)
+		|| (major<1)
+		|| !XShapeQueryVersion(display, &major, &minor)
+		|| !(((major==1) && (minor >= 1)) || (major >= 2))
+	)) {
+		return;
+	}
+
+	// create an image for storing the cursor
+	cursor_image = XCreateImage (display, NULL, 24, ZPixmap, 0, (char*)cursor_pixels,
+				CURSOR_SIZE, CURSOR_SIZE, 32, 256);
+	if (!cursor_image) {
+		error("XCreateImage() failed");
+		return;
+	}
+
+	// create a pixmap for storing the cursor
+	cursor_pixmap = XCreatePixmap (display, root_window,
+				CURSOR_SIZE, CURSOR_SIZE,
+				XDefaultDepth(display, screen));
+
+	// create a pixmap for storing the mask
+	cursor_mask_pixmap = XCreatePixmap (display, root_window,
+				CURSOR_SIZE, CURSOR_SIZE, 1);
+
+	// create an image for storing the mask
+	cursor_mask_image = XCreateImage (display, NULL, 1, ZPixmap, 0, (char*)cursor_mask_pixels,
+				CURSOR_SIZE, CURSOR_SIZE, 8, CURSOR_SIZE/8);
+	if (!cursor_mask_image) {
+		error("XCreateImage() failed");
+		return;
+	}
+
+	// create a context for manipulating the mask
+	cursor_mask_gc = XCreateGC(display, cursor_mask_pixmap, 0, NULL); 
+	if(!cursor_mask_gc) {
+		error ("XCreateGC() failed");
+		return;
+	}
+
+	// create a sub-window displaying the cursor
+	XSetWindowAttributes attr;
+	attr.background_pixmap = cursor_pixmap;
+	cursor_window = XCreateWindow (display,
+				gdk_x11_window_get_xid(gdkwin),
+				10, 10,
+				CURSOR_SIZE, CURSOR_SIZE,
+				0, CopyFromParent,
+				InputOutput, CopyFromParent,
+				CWBackPixmap, &attr);
+
+	// refresh the cursor
+	refresh_cursor_image();
+
+	XMapWindow(display, cursor_window);
+
+	// request cursor change notifications
+	XFixesSelectCursorInput(display, gdk_x11_window_get_xid(gdkwin), XFixesCursorNotify);
+
+	copy_cursor = 1;
+}
+#endif
+
 GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 {
 	XEvent* ev = (XEvent*)xevent;
@@ -156,10 +324,21 @@ GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		{
 			// cursor was moved
 			refresh_cursor_location();
+			return GDK_FILTER_REMOVE;
 		}
 	}
 #endif
 
+#ifdef COPY_CURSOR
+	if(copy_cursor)
+	{
+		if (ev->type == xfixes_event_base + XFixesCursorNotify) {
+			refresh_cursor_image();
+
+			return GDK_FILTER_REMOVE;
+		}
+	}
+#endif
 	return GDK_FILTER_CONTINUE;
 }
 
@@ -411,6 +590,10 @@ main (int argc, char *argv[])
 
 #ifdef HAVE_XI
 	init_cursor_tracking();
+#endif
+
+#ifdef COPY_CURSOR
+	init_copy_cursor();
 #endif
 
 	XFlush (display);
