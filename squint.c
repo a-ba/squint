@@ -11,6 +11,9 @@
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/shape.h>
 #endif
+#ifdef USE_XDAMAGE
+#include <X11/extensions/Xdamage.h>
+#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -40,6 +43,15 @@ GdkPoint cursor = {0, 0};
 #ifdef HAVE_XI
 int track_cursor = 0;
 int xi_opcode = 0;
+#endif
+
+#ifdef USE_XDAMAGE
+GdkRectangle gdkwin_extents;
+int use_xdamage = 0;
+int window_mapped = 1;
+int xdamage_event_base;
+Damage damage = 0;
+XserverRegion screen_region = 0;
 #endif
 
 #ifdef COPY_CURSOR
@@ -339,6 +351,33 @@ GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		}
 	}
 #endif
+
+#ifdef USE_XDAMAGE
+	if(use_xdamage)
+	{
+		if (ev->type == xdamage_event_base + XDamageNotify)
+		{
+			XDamageNotifyEvent* xd_ev = (XDamageNotifyEvent*) ev;
+
+			// we do not refresh the window in case it overlaps with
+			// the duplicated screen (to avoid any amplification)
+			if (!gdk_rectangle_intersect(&rect, &gdkwin_extents, NULL)) {
+				// check if damage intersects with the screen
+				GdkRectangle damage_rect;
+				damage_rect.x = xd_ev->area.x;
+				damage_rect.y = xd_ev->area.y;
+				damage_rect.width  = xd_ev->area.width;
+				damage_rect.height = xd_ev->area.height;
+
+				if (gdk_rectangle_intersect(&damage_rect, &rect, NULL))
+				{
+					refresh_image(NULL);
+				}
+			}
+			XDamageSubtract(display, damage, 0, 0);
+		}
+	}
+#endif
 	return GDK_FILTER_CONTINUE;
 }
 
@@ -370,6 +409,53 @@ void init_cursor_tracking()
 	XISelectEvents(display, root_window, evmasks, 1);
 
 	track_cursor = 1;
+}
+#endif
+
+#ifdef USE_XDAMAGE
+void init_xdamage()
+{
+	int error_base, major, minor;
+	if (	   !XFixesQueryExtension(display, &xfixes_event_base, &error_base)
+		|| !XFixesQueryVersion(display, &major, &minor)
+		|| (major<2)
+		|| !XDamageQueryExtension(display, &xdamage_event_base, &error_base)
+		|| !XDamageQueryVersion(display, &major, &minor)
+		|| (major<1)
+	) {
+		return;
+	}
+
+	damage = XDamageCreate(display, root_window, XDamageReportBoundingBox);
+
+	XRectangle r;
+	r.x = rect.x;
+	r.y = rect.y;
+	r.width = rect.width;
+	r.height = rect.height;
+
+	screen_region = XFixesCreateRegion(display, &r, 1);
+
+	use_xdamage = 1;
+}
+
+gboolean on_window_configure_event(GtkWidget *widget, GdkEvent  *event, gpointer   user_data)
+{
+	gdk_window_get_frame_extents (gdkwin, &gdkwin_extents);
+	if (gdk_rectangle_intersect(&gdkwin_extents, &rect, NULL)) {
+		if (window_mapped) {
+			window_mapped = 0;
+			XUnmapWindow(display, window);
+			XUnmapWindow(display, cursor_window);
+		}
+	} else {
+		if (!window_mapped) {
+			window_mapped = 1;
+			XMapWindow(display, window);
+			XMapWindow(display, cursor_window);
+		}
+	}
+	return TRUE;
 }
 #endif
 
@@ -596,6 +682,10 @@ main (int argc, char *argv[])
 	init_copy_cursor();
 #endif
 
+#ifdef USE_XDAMAGE
+	init_xdamage();
+#endif
+
 	XFlush (display);
 
 	GValue v = G_VALUE_INIT;
@@ -609,8 +699,16 @@ main (int argc, char *argv[])
 
 	// catch all X11 events
 	gdk_window_add_filter(NULL, on_x11_event, NULL);
-
-	g_timeout_add (40, &refresh_image, NULL);
+#ifdef USE_XDAMAGE
+	if (use_xdamage)
+	{
+		on_window_configure_event(NULL, NULL, NULL);
+		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
+	}
+#endif
+	{
+		g_timeout_add (40, &refresh_image, NULL);
+	}
 
 	gtk_main ();
 

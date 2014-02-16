@@ -25,9 +25,16 @@ def configure (conf):
 	conf.check_cfg(package="xi", args="--cflags --libs", uselib_store="XI",
 			atleast_version="1.5", mandatory=False)
 
-	if (
-		conf.check_cfg(package="xfixes", args="--cflags --libs",
-			uselib_store="XFIXES", mandatory=False) and
+	have_xfixes = conf.check_cfg(package="xfixes", args="--cflags --libs",
+			uselib_store="XFIXES", mandatory=False)
+
+	if (have_xfixes and
+		conf.check_cfg(package="xdamage", args="--cflags --libs", uselib_store="XDAMAGE",
+			mandatory=False)
+	):
+		conf.define("USE_XDAMAGE", 1)
+
+	if (have_xfixes and
 		conf.check_cfg(package="xext", args="--cflags --libs",
 			uselib_store="XEXT", mandatory=False)
 	):
@@ -41,7 +48,7 @@ def build (bld):
 	bld.program(
 		target="squint",
 		source="squint.c",
-		uselib="GTK XI XFIXES XEXT"
+		uselib="GTK XI XFIXES XEXT XDAMAGE"
 	)
 
 	bld.install_as("${PREFIX}/share/squint/squint.png", "squint.png")
