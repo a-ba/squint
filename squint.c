@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 
-GtkWidget* window = NULL;
+GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
 Window root_window = 0;
 Pixmap pixmap = -1;
@@ -249,7 +249,7 @@ main (int argc, char *argv[])
 	}
 
 
-	window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 	
 	{
 		// load the icon
@@ -257,7 +257,7 @@ main (int argc, char *argv[])
 		GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
 		if (pixbuf)
 		{
-			gtk_window_set_icon (GTK_WINDOW(window), pixbuf);
+			gtk_window_set_icon (GTK_WINDOW(gtkwin), pixbuf);
 			g_object_unref (pixbuf);
 		} else {
 			fprintf (stderr, "warning: no icon: %s\n", err->message);
@@ -315,9 +315,9 @@ main (int argc, char *argv[])
 	}
 
 	// create my own window
-	gtk_widget_show_all (window);
+	gtk_widget_show_all (gtkwin);
 
-	gdkwin = gtk_widget_get_window(window);
+	gdkwin = gtk_widget_get_window(gtkwin);
 
 	offset.x = 0;
 	offset.y = 0;
@@ -335,7 +335,7 @@ main (int argc, char *argv[])
 		} else {
 			// black background
 			GdkRGBA black = {0,0,0,1};
-			gtk_widget_override_background_color(window, 0, &black);
+			gtk_widget_override_background_color(gtkwin, 0, &black);
 
 			// go full screen
 			gdk_window_fullscreen (gdkwin);
@@ -353,10 +353,10 @@ main (int argc, char *argv[])
 	}
 
 	// quit on window closed
-	g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
+	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
 
 	// hide the window on click
-	g_signal_connect (window, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
+	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
 	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 
 	// create the pixmap
@@ -379,10 +379,10 @@ main (int argc, char *argv[])
 	g_value_init (&v, G_TYPE_INT);
 
 	g_value_set_int (&v, rect.width);
-	g_object_set_property (G_OBJECT(window), "width-request", &v);
+	g_object_set_property (G_OBJECT(gtkwin), "width-request", &v);
 
 	g_value_set_int (&v, rect.height);
-	g_object_set_property (G_OBJECT(window), "height-request", &v);
+	g_object_set_property (G_OBJECT(gtkwin), "height-request", &v);
 
 
 	g_timeout_add (40, &refresh_image, NULL);
