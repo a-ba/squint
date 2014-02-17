@@ -442,9 +442,14 @@ void init_xdamage()
 	use_xdamage = 1;
 }
 
-gboolean on_window_configure_event(GtkWidget *widget, GdkEvent  *event, gpointer   user_data)
+gboolean on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
 {
-	gdk_window_get_frame_extents (gdkwin, &gdkwin_extents);
+	GdkEventConfigure* e = (GdkEventConfigure*) event;
+	gdkwin_extents.x = e->x;
+	gdkwin_extents.y = e->y;
+	gdkwin_extents.width  = e->width;
+	gdkwin_extents.height = e->height;
+
 	if (gdk_rectangle_intersect(&gdkwin_extents, &rect, NULL)) {
 		if (window_mapped) {
 			window_mapped = 0;
@@ -705,7 +710,6 @@ main (int argc, char *argv[])
 #ifdef USE_XDAMAGE
 	if (use_xdamage)
 	{
-		on_window_configure_event(NULL, NULL, NULL);
 		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
 	}
 #endif
