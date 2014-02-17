@@ -20,6 +20,16 @@
 #include <string.h>
 #include <stdlib.h>
 
+// Config
+struct {
+	const char* source_monitor_name;
+
+	gboolean opt_version, opt_window;
+} config;
+
+// State
+gboolean enabled = FALSE;
+gboolean fullscreen = FALSE;
 
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
@@ -31,8 +41,6 @@ GC gc = NULL;
 GC gc_white = NULL;
 Display* display = NULL;
 int raised = 0;
-
-gboolean opt_version, opt_window;
 
 GdkRectangle rect;
 GdkPoint offset;
@@ -85,7 +93,7 @@ void show()
 	{
 		raised = 1;
 		gdk_window_raise(gdkwin);
-		if (!opt_window) {
+		if (fullscreen) {
 			gdk_window_fullscreen(gdkwin);
 		}
 	}
@@ -94,7 +102,7 @@ void show()
 void do_hide()
 {
 	raised = 0;
-	if (!opt_window) {
+	if (fullscreen) {
 		gdk_window_unfullscreen(gdkwin);
 	}
 	gdk_window_lower(gdkwin);
@@ -497,18 +505,18 @@ gboolean on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer 
 #endif
 
 GOptionEntry option_entries[] = {
-  { "version",	'v',	0,	G_OPTION_ARG_NONE,	&opt_version,	"Display version information and exit", NULL},
-  { "window",	'w',	0,	G_OPTION_ARG_NONE,	&opt_window,	"Run inside a window instead of going fullscreen", NULL},
+  { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
+  { "window",	'w',	0,	G_OPTION_ARG_NONE,	&config.opt_window,	"Run inside a window instead of going fullscreen", NULL},
   { NULL }
 };
 
 int
 main (int argc, char *argv[])
 {
-	const char* monitor_name;
-
 	GError *err = NULL;
 	GOptionContext *context;
+
+	memset(&config, 0, sizeof(config));
 
 	context = g_option_context_new (NULL);
 	g_option_context_add_main_entries (context, option_entries, NULL);
@@ -520,7 +528,7 @@ main (int argc, char *argv[])
 		return 1;
 	}
 
-	if (opt_version) {
+	if (config.opt_version) {
 		puts(APPNAME " " VERSION);
 		return 0;
 	}
@@ -528,15 +536,17 @@ main (int argc, char *argv[])
 	switch (argc)
 	{
 		case 1:
-			monitor_name = NULL;
+			config.source_monitor_name = NULL;
 			break;
 		case 2:
-			monitor_name = argv[1];
+			config.source_monitor_name = argv[1];
 			break;
 		default:
 			error("invalid arguments");
 			return 1;
 	}
+
+	// initialisation
 
 	GdkDisplay* gdisplay = gdk_display_get_default();
 	if (!gdisplay) {
@@ -545,60 +555,7 @@ main (int argc, char *argv[])
 	}
 	GdkScreen* gscreen = gdk_display_get_default_screen (gdisplay);
 
-	{
-		int n = gdk_screen_get_n_monitors (gscreen);
-		if ((n < 2) && !monitor_name) {
-			fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
-			return 1;
-		}
-
-		int i;
-		int min_area = INT_MAX;
-		GdkRectangle r;
-
-		if (monitor_name == NULL)
-		{
-			// find the smallest screen
-			for (i=0 ; i<n ; i++)
-			{
-				gdk_screen_get_monitor_geometry (gscreen, i, &r);
-				int area = r.width * r.height;
-				if (area < min_area)
-					min_area = area;
-			}
-		}
-
-		for (i=0 ; i<n ; i++)
-		{
-			gdk_screen_get_monitor_geometry (gscreen, i, &r);
-			int area = r.width * r.height;
-
-			if (monitor_name == NULL) {
-				if (area == min_area)
-					break;
-			} else {
-				if (strcmp (monitor_name, gdk_screen_get_monitor_plug_name (gscreen, i)) == 0)
-					break;
-			}
-		}
-
-		if (i == n)
-		{
-			fprintf (stderr, "error: invalid monitor\n");
-			return 1;
-		}
-
-		rect = r;
-		printf("Using monitor %d (%s) %dx%d  +%d+%d\n",
-			i, gdk_screen_get_monitor_plug_name (gscreen, i),
-			rect.width, rect.height,
-			rect.x, rect.y
-		);
-	}
-
-
 	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-	
 	{
 		// load the icon
 		GError* err = NULL;
@@ -612,15 +569,18 @@ main (int argc, char *argv[])
 			g_error_free (err);
 		}
 	}
+	// quit on window closed
+	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
+
+	// hide the window on click
+	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
+	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 
 	display = gdk_x11_get_default_xdisplay();
-	//printf("display: %p\n", display);
 
 	screen = DefaultScreen (display);
-	//printf("screen: %d\n", screen);
 
 	depth = XDefaultDepth (display, screen);
-	//printf("depth: %d\n", depth);
 
 	// get the root window
 	root_window = XDefaultRootWindow(display);
@@ -644,14 +604,69 @@ main (int argc, char *argv[])
 		}
 	}
 
-	// create my own window
+	// map my window
 	gtk_widget_show_all (gtkwin);
 
 	gdkwin = gtk_widget_get_window(gtkwin);
 
+	// activation
+	{
+		int n = gdk_screen_get_n_monitors (gscreen);
+		if ((n < 2) && !config.source_monitor_name) {
+			fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
+			return 1;
+		}
+
+		int i;
+		int min_area = INT_MAX;
+		GdkRectangle r;
+
+		if (config.source_monitor_name == NULL)
+		{
+			// find the smallest screen
+			for (i=0 ; i<n ; i++)
+			{
+				gdk_screen_get_monitor_geometry (gscreen, i, &r);
+				int area = r.width * r.height;
+				if (area < min_area)
+					min_area = area;
+			}
+		}
+
+		for (i=0 ; i<n ; i++)
+		{
+			gdk_screen_get_monitor_geometry (gscreen, i, &r);
+			int area = r.width * r.height;
+
+			if (config.source_monitor_name == NULL) {
+				if (area == min_area)
+					break;
+			} else {
+				if (strcmp (config.source_monitor_name, gdk_screen_get_monitor_plug_name (gscreen, i)) == 0)
+					break;
+			}
+		}
+
+		if (i == n)
+		{
+			fprintf (stderr, "error: invalid monitor\n");
+			return 1;
+		}
+
+		rect = r;
+		printf("Using monitor %d (%s) %dx%d  +%d+%d\n",
+			i, gdk_screen_get_monitor_plug_name (gscreen, i),
+			rect.width, rect.height,
+			rect.x, rect.y
+		);
+	}
+
+
+
 	offset.x = 0;
 	offset.y = 0;
-	if (!opt_window) {
+	fullscreen = !config.opt_window;
+	if (fullscreen) {
 		// get the monitor on which the window is displayed
 		int mon = gdk_screen_get_monitor_at_window(gscreen, gdkwin);
 		GdkRectangle wa;
@@ -660,7 +675,7 @@ main (int argc, char *argv[])
 		if ((rect.x == wa.x) && (rect.y == wa.y)) {
 			// same as the source monitor
 			// -> do NOT go fullscreen
-			opt_window = TRUE;
+			fullscreen = FALSE;
 			fprintf(stderr, "error: cannot duplicate the output on the same monitor, falling back to window mode\n");
 		} else {
 			// black background
@@ -682,12 +697,6 @@ main (int argc, char *argv[])
 		}
 	}
 
-	// quit on window closed
-	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-
-	// hide the window on click
-	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
-	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, rect.width, rect.height, depth);
