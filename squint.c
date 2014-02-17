@@ -142,8 +142,8 @@ void refresh_cursor_location()
 	if (copy_cursor) {
 		// move the cursor window to the new location of the cursor
 		XMoveWindow (display, cursor_window,
-				cursor.x - cursor_xhot,
-				cursor.y - cursor_yhot);
+				cursor.x - cursor_xhot + offset.x,
+				cursor.y - cursor_yhot + offset.y);
 
 		// force redrawing the window
 		XClearWindow(display, cursor_window);
