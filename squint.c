@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 
 GtkWidget* gtkwin = NULL;
@@ -33,8 +32,7 @@ GC gc_white = NULL;
 Display* display = NULL;
 int raised = 0;
 
-int opt_full = 1;
-
+gboolean opt_version, opt_window;
 
 GdkRectangle rect;
 GdkPoint offset;
@@ -75,7 +73,7 @@ uint8_t  cursor_mask_pixels[CURSOR_SIZE*CURSOR_SIZE];
 void
 error (const char* msg)
 {
-	fprintf(stderr, "%s\n", msg);
+	fprintf(stderr, "error: %s\n", msg);
 }
 
 void show()
@@ -84,7 +82,7 @@ void show()
 	{
 		raised = 1;
 		gdk_window_raise(gdkwin);
-		if (opt_full) {
+		if (!opt_window) {
 			gdk_window_fullscreen(gdkwin);
 		}
 	}
@@ -93,7 +91,7 @@ void show()
 void do_hide()
 {
 	raised = 0;
-	if (opt_full) {
+	if (!opt_window) {
 		gdk_window_unfullscreen(gdkwin);
 	}
 	gdk_window_lower(gdkwin);
@@ -467,51 +465,46 @@ gboolean on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer 
 }
 #endif
 
-void print_help()
-{
-	printf(
-		"usage: squint [-w] [MonitorName]\n"
-		"\n"
-		"	MonitorName	name of the monitor to be duplicated (from xrandr)\n"
-		"	-v		display version information and exit\n"
-		"	-w		run inside a window instead of going fullscreen\n"
-	);
-	exit(1);
-}
+GOptionEntry option_entries[] = {
+  { "version",	'v',	0,	G_OPTION_ARG_NONE,	&opt_version,	"Display version information and exit", NULL},
+  { "window",	'w',	0,	G_OPTION_ARG_NONE,	&opt_window,	"Run inside a window instead of going fullscreen", NULL},
+  { NULL }
+};
 
 int
 main (int argc, char *argv[])
 {
 	const char* monitor_name;
 
-	gtk_init (&argc, &argv);
+	GError *err = NULL;
+	GOptionContext *context;
 
-	int opt;
-	while ((opt = getopt(argc, argv, "vw")) != -1)
+	context = g_option_context_new (NULL);
+	g_option_context_add_main_entries (context, option_entries, NULL);
+	g_option_context_add_group (context, gtk_get_option_group (TRUE));
+
+	if (!gtk_init_with_args (&argc, &argv, "[MonitorName]", option_entries, NULL, &err))
 	{
-		switch(opt)
-		{
-		case 'v':
-			puts(APPNAME " " VERSION);
-			return 0;
-		case 'w':
-			opt_full = 0;
-			break;
-		default:
-			print_help();
-		}
+		error(err->message);
+		return 1;
 	}
 
-	switch (argc-optind)
+	if (opt_version) {
+		puts(APPNAME " " VERSION);
+		return 0;
+	}
+
+	switch (argc)
 	{
-		case 0:
+		case 1:
 			monitor_name = NULL;
 			break;
-		case 1:
-			monitor_name = argv[optind];
+		case 2:
+			monitor_name = argv[1];
 			break;
 		default:
-			print_help();
+			error("invalid arguments");
+			return 1;
 	}
 
 	GdkDisplay* gdisplay = gdk_display_get_default();
@@ -627,7 +620,7 @@ main (int argc, char *argv[])
 
 	offset.x = 0;
 	offset.y = 0;
-	if (opt_full) {
+	if (!opt_window) {
 		// get the monitor on which the window is displayed
 		int mon = gdk_screen_get_monitor_at_window(gscreen, gdkwin);
 		GdkRectangle wa;
@@ -636,7 +629,7 @@ main (int argc, char *argv[])
 		if ((rect.x == wa.x) && (rect.y == wa.y)) {
 			// same as the source monitor
 			// -> do NOT go fullscreen
-			opt_full = 0;
+			opt_window = TRUE;
 			fprintf(stderr, "error: cannot duplicate the output on the same monitor, falling back to window mode\n");
 		} else {
 			// black background
