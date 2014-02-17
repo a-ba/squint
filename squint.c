@@ -364,7 +364,7 @@ GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 
 			// we do not refresh the window in case it overlaps with
 			// the duplicated screen (to avoid any amplification)
-			if (!gdk_rectangle_intersect(&rect, &gdkwin_extents, NULL)) {
+			if (!xd_ev->more && !gdk_rectangle_intersect(&rect, &gdkwin_extents, NULL)) {
 				// check if damage intersects with the screen
 				GdkRectangle damage_rect;
 				damage_rect.x = xd_ev->area.x;
