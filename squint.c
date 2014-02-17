@@ -50,6 +50,9 @@ int window_mapped = 1;
 int xdamage_event_base;
 Damage damage = 0;
 XserverRegion screen_region = 0;
+#define MIN_PERIOD 20
+Time next_refresh=0;
+gint refresh_timeout=0;
 #endif
 
 #ifdef COPY_CURSOR
@@ -195,6 +198,34 @@ refresh_image (gpointer data)
 
 	return TRUE;
 }
+
+void try_refresh_image (Time timestamp);
+gboolean _try_refresh_image_timeout (gpointer data)
+{
+	refresh_timeout=0;
+
+	if ((Time)data == next_refresh)
+	{
+		try_refresh_image(next_refresh);
+	}
+	return FALSE;
+}
+
+void try_refresh_image (Time timestamp)
+{
+	if ((timestamp >= next_refresh) || (timestamp < next_refresh - 1000)) {
+		if (refresh_timeout) {
+			g_source_remove(refresh_timeout);
+			refresh_timeout=0;
+		}
+		next_refresh = timestamp + MIN_PERIOD;
+		refresh_image(NULL);
+
+	} else if (!refresh_timeout) {
+		refresh_timeout = g_timeout_add (next_refresh - timestamp, _try_refresh_image_timeout, NULL);
+	}
+}
+
 
 
 #ifdef COPY_CURSOR
@@ -372,7 +403,7 @@ GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 
 				if (gdk_rectangle_intersect(&damage_rect, &rect, NULL))
 				{
-					refresh_image(NULL);
+					try_refresh_image(xd_ev->timestamp);
 				}
 			}
 			XDamageSubtract(display, damage, 0, 0);
@@ -709,6 +740,9 @@ main (int argc, char *argv[])
 	{
 		g_timeout_add (40, &refresh_image, NULL);
 	}
+
+	// Redraw the window
+	XClearWindow(display, gdk_x11_window_get_xid(gdkwin));
 
 	gtk_main ();
 
