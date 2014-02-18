@@ -45,6 +45,7 @@ GdkScreen* gscreen = NULL;
 int raised = 0;
 GdkPixbuf* icon_enabled  = NULL;
 GdkPixbuf* icon_disabled = NULL;
+gint refresh_timer = 0;
 
 GdkRectangle rect;
 GdkPoint offset;
@@ -80,10 +81,11 @@ XImage* cursor_mask_image = NULL;
 GC	cursor_mask_gc = NULL;
 int cursor_xhot=0;
 int cursor_yhot=0;
-uint32_t cursor_pixels[CURSOR_SIZE*CURSOR_SIZE];
-uint8_t  cursor_mask_pixels[CURSOR_SIZE*CURSOR_SIZE];
+uint32_t* cursor_pixels;
+uint8_t*  cursor_mask_pixels;
 #endif
 
+void disable();
 
 void
 error (const char* msg)
@@ -132,6 +134,11 @@ on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 
 gboolean on_status_icon_activated(GtkWidget* widget, gpointer data)
 {
+	if (enabled) {
+		disable();
+	} else {
+		enable();
+	}
 	return FALSE;
 }
 
@@ -366,6 +373,7 @@ enable_copy_cursor()
 	}
 
 	// create an image for storing the cursor
+	cursor_pixels = (uint32_t*) malloc(sizeof(*cursor_pixels)*CURSOR_SIZE*CURSOR_SIZE);
 	cursor_image = XCreateImage (display, NULL, 24, ZPixmap, 0, (char*)cursor_pixels,
 				CURSOR_SIZE, CURSOR_SIZE, 32, 256);
 	if (!cursor_image) {
@@ -383,6 +391,7 @@ enable_copy_cursor()
 				CURSOR_SIZE, CURSOR_SIZE, 1);
 
 	// create an image for storing the mask
+	cursor_mask_pixels = (uint8_t*) malloc(CURSOR_SIZE*CURSOR_SIZE/8);
 	cursor_mask_image = XCreateImage (display, NULL, 1, ZPixmap, 0, (char*)cursor_mask_pixels,
 				CURSOR_SIZE, CURSOR_SIZE, 8, CURSOR_SIZE/8);
 	if (!cursor_mask_image) {
@@ -416,7 +425,31 @@ enable_copy_cursor()
 	// request cursor change notifications
 	XFixesSelectCursorInput(display, gdk_x11_window_get_xid(gdkwin), XFixesCursorNotify);
 
-	copy_cursor = 1;
+	copy_cursor = TRUE;
+}
+
+void
+disable_copy_cursor()
+{
+	if (!copy_cursor) {
+		return;
+	}
+
+	XDestroyWindow(display, cursor_window);
+	cursor_window = 0;
+
+	XFreeGC(display, cursor_mask_gc);
+	cursor_mask_gc = 0;
+
+	XFreePixmap(display, cursor_pixmap);
+	XFreePixmap(display, cursor_mask_pixmap);
+	cursor_pixmap = cursor_mask_pixmap = 0;
+
+	XDestroyImage(cursor_image);
+	XDestroyImage(cursor_mask_image);
+	cursor_image = cursor_mask_image = NULL;
+
+	copy_cursor = FALSE;
 }
 #endif
 
@@ -481,6 +514,25 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 }
 
 #ifdef HAVE_XI
+void
+set_xi_eventmask(gboolean active)
+{
+	XIEventMask evmasks[1];
+	unsigned char mask1[(XI_LASTEVENT + 7)/8];
+	memset(mask1, 0, sizeof(mask1));
+
+	if (active) {
+		// select for button and key events from all master devices
+		XISetMask(mask1, XI_RawMotion);
+	}
+
+	evmasks[0].deviceid = XIAllMasterDevices;
+	evmasks[0].mask_len = sizeof(mask1);
+	evmasks[0].mask = mask1;
+
+	XISelectEvents(display, root_window, evmasks, 1);
+}
+
 // enable notification of motion events (XI_RawMotion)
 //
 // state:
@@ -501,25 +553,24 @@ enable_cursor_tracking()
 	if (!XQueryExtension(display, "XInputExtension", &xi_opcode, &event, &error))
 		return;
 	
-
 	int major=2, minor=2;
 	if (XIQueryVersion(display, &major, &minor) != Success)
 		return;
 
-	XIEventMask evmasks[1];
-	unsigned char mask1[(XI_LASTEVENT + 7)/8];
-	memset(mask1, 0, sizeof(mask1));
-
-	// select for button and key events from all master devices
-	XISetMask(mask1, XI_RawMotion);
-
-	evmasks[0].deviceid = XIAllMasterDevices;
-	evmasks[0].mask_len = sizeof(mask1);
-	evmasks[0].mask = mask1;
-
-	XISelectEvents(display, root_window, evmasks, 1);
+	set_xi_eventmask(TRUE);
 
 	track_cursor = TRUE;
+}
+
+void
+disable_cursor_tracking()
+{
+	if(!track_cursor)
+		return;
+
+	set_xi_eventmask(FALSE);
+
+	track_cursor = FALSE;
 }
 #endif
 
@@ -564,6 +615,27 @@ enable_xdamage()
 	use_xdamage = TRUE;
 }
 
+void
+disable_xdamage()
+{
+	if (!use_xdamage) {
+		return;
+	}
+
+	if (screen_region) {
+		XFixesDestroyRegion(display, screen_region);
+		screen_region = 0;
+	}
+
+	if (damage) {
+		XDamageDestroy(display, damage);
+		damage = 0;
+	}
+
+	use_xdamage = FALSE;
+}
+#endif
+
 gboolean
 on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
 {
@@ -573,6 +645,7 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 	gdkwin_extents.width  = e->width;
 	gdkwin_extents.height = e->height;
 
+#ifdef USE_XDAMAGE
 	if (use_xdamage)
 	{
 		if (gdk_rectangle_intersect(&gdkwin_extents, &rect, NULL)) {
@@ -589,9 +662,9 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 			}
 		}
 	}
+#endif
 	return TRUE;
 }
-#endif
 
 gboolean
 init()
@@ -730,6 +803,7 @@ select_monitor()
 
 	if (i == n)
 	{
+		//TODO: report this error at startup
 		fprintf (stderr, "error: invalid monitor\n");
 		return FALSE;
 	}
@@ -746,12 +820,11 @@ select_monitor()
 // Prepare the window to host the duplicated screen (create the pixmap, subwindow)
 //
 // initialises:
-// 	offsest
+// 	offset
 // 	pixmap
 // 	window
+//	fullscreen
 //
-// may alter (fallback):
-// 	fullscreen
 void
 enable_window()
 {
@@ -816,6 +889,16 @@ enable_window()
 	}
 }
 
+void
+disable_window()
+{
+	XDestroyWindow(display, window);
+	window = 0;
+
+	XFreePixmap(display, pixmap);
+	pixmap = 0;
+}
+
 gboolean
 enable()
 {
@@ -851,7 +934,7 @@ enable()
 	if (!use_xdamage)
 #endif
 	{
-		g_timeout_add (40, &refresh_image, NULL);
+		refresh_timer = g_timeout_add (40, &refresh_image, NULL);
 	}
 
 	// Redraw the window
@@ -860,6 +943,39 @@ enable()
 	enabled = TRUE;
 	refresh_status_icon();
 	return TRUE;
+}
+
+void
+disable()
+{
+	if (refresh_timeout) {
+		g_source_remove(refresh_timeout);
+		refresh_timeout = 0;
+	}
+	if (refresh_timer) {
+		g_source_remove(refresh_timer);
+		refresh_timer = 0;
+	}
+
+	gdk_window_remove_filter(NULL, on_x11_event, NULL);
+
+#ifdef HAVE_XI
+	disable_cursor_tracking();
+#endif
+
+#ifdef COPY_CURSOR
+	disable_copy_cursor();
+#endif
+
+#ifdef USE_XDAMAGE
+	disable_xdamage();
+#endif
+
+	disable_window();
+
+	enabled = FALSE;
+	refresh_status_icon();
+	return;
 }
 
 
