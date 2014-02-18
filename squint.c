@@ -40,6 +40,7 @@ int depth = -1, screen = -1;
 GC gc = NULL;
 GC gc_white = NULL;
 Display* display = NULL;
+GdkScreen* gscreen = NULL;
 int raised = 0;
 
 GdkRectangle rect;
@@ -47,13 +48,13 @@ GdkPoint offset;
 GdkPoint cursor = {0, 0};
 
 #ifdef HAVE_XI
-int track_cursor = 0;
+gboolean track_cursor = FALSE;
 int xi_opcode = 0;
 #endif
 
 #ifdef USE_XDAMAGE
 GdkRectangle gdkwin_extents;
-int use_xdamage = 0;
+gboolean use_xdamage = FALSE;
 int window_mapped = 1;
 int xdamage_event_base;
 Damage damage = 0;
@@ -289,8 +290,25 @@ void refresh_cursor_image()
 	XFree(img);
 }
 
-void init_copy_cursor()
+// enable the duplication of the cursor (with XFixes & XShape)
+//
+// state:
+// 	copy_cursor
+//
+// initialises:
+// 	cursor_image
+// 	cursor_pixmap
+// 	cursor_mask_image
+// 	cursor_mask_pixmap
+// 	cursor_mask_gc
+// 	cursor_window
+//
+void enable_copy_cursor()
 {
+	if (copy_cursor) {
+		return;
+	}
+
 	// ensure we are in true color
 	if (XDefaultDepth(display, screen) != 24) {
 		return;
@@ -422,8 +440,19 @@ GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 }
 
 #ifdef HAVE_XI
-void init_cursor_tracking()
+// enable notification of motion events (XI_RawMotion)
+//
+// state:
+// 	track_cursor
+//
+// initialises:
+// 	xi_opcode
+//
+void enable_cursor_tracking()
 {
+	if (track_cursor)
+		return;
+
 	// inspired from: http://keithp.com/blogs/Cursor_tracking/
 	
 	int event, error;
@@ -448,13 +477,26 @@ void init_cursor_tracking()
 
 	XISelectEvents(display, root_window, evmasks, 1);
 
-	track_cursor = 1;
+	track_cursor = TRUE;
 }
 #endif
 
 #ifdef USE_XDAMAGE
-void init_xdamage()
+// enable notification of screen updates (XDamageNotify)
+//
+// state:
+// 	use_xdamage
+//
+// initialises:
+// 	damage
+// 	screen_region
+//
+void enable_xdamage()
 {
+	if (use_xdamage) {
+		return;
+	}
+
 	int error_base, major, minor;
 	if (	   !XFixesQueryExtension(display, &xfixes_event_base, &error_base)
 		|| !XFixesQueryVersion(display, &major, &minor)
@@ -476,7 +518,7 @@ void init_xdamage()
 
 	screen_region = XFixesCreateRegion(display, &r, 1);
 
-	use_xdamage = 1;
+	use_xdamage = TRUE;
 }
 
 gboolean on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
@@ -503,6 +545,254 @@ gboolean on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer 
 	return TRUE;
 }
 #endif
+
+gboolean init()
+{
+	GdkDisplay* gdisplay = gdk_display_get_default();
+	if (!gdisplay) {
+		fprintf (stderr, "error: no display available\n");
+		return FALSE;
+	}
+	gscreen = gdk_display_get_default_screen (gdisplay);
+
+	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+	{
+		// load the icon
+		GError* err = NULL;
+		GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
+		if (pixbuf)
+		{
+			gtk_window_set_icon (GTK_WINDOW(gtkwin), pixbuf);
+			g_object_unref (pixbuf);
+		} else {
+			fprintf (stderr, "warning: no icon: %s\n", err->message);
+			g_error_free (err);
+		}
+	}
+	// black background
+	GdkRGBA black = {0,0,0,1};
+	gtk_widget_override_background_color(gtkwin, 0, &black);
+
+	// quit on window closed
+	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
+
+	// hide the window on click
+	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
+	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
+
+	display = gdk_x11_get_default_xdisplay();
+
+	screen = DefaultScreen (display);
+
+	depth = XDefaultDepth (display, screen);
+
+	// get the root window
+	root_window = XDefaultRootWindow(display);
+	
+	{
+		XGCValues values;
+		values.subwindow_mode = IncludeInferiors;
+
+		gc = XCreateGC (display, root_window, GCSubwindowMode, &values);
+		if(!gc) {
+			error ("XCreateGC() failed");
+			return FALSE;
+		}
+
+		values.line_width = 3;
+		values.foreground = 0xe0e0e0;
+		gc_white = XCreateGC (display, root_window, GCLineWidth | GCForeground, &values);
+		if(!gc_white) {
+			error ("XCreateGC() failed");
+			return FALSE;
+		}
+	}
+
+	// map my window
+	gtk_widget_show_all (gtkwin);
+
+	gdkwin = gtk_widget_get_window(gtkwin);
+
+	return TRUE;
+}
+
+//
+// select which monitor is going to be duplicated
+//
+// initialises:
+// 	rect
+gboolean select_monitor()
+{
+	int n = gdk_screen_get_n_monitors (gscreen);
+	if ((n < 2) && !config.source_monitor_name) {
+		fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
+		return FALSE;
+	}
+
+	int i;
+	int min_area = INT_MAX;
+	GdkRectangle r;
+
+	if (config.source_monitor_name == NULL)
+	{
+		// find the smallest screen
+		for (i=0 ; i<n ; i++)
+		{
+			gdk_screen_get_monitor_geometry (gscreen, i, &r);
+			int area = r.width * r.height;
+			if (area < min_area)
+				min_area = area;
+		}
+	}
+
+	for (i=0 ; i<n ; i++)
+	{
+		gdk_screen_get_monitor_geometry (gscreen, i, &r);
+		int area = r.width * r.height;
+
+		if (config.source_monitor_name == NULL) {
+			if (area == min_area)
+				break;
+		} else {
+			if (strcmp (config.source_monitor_name, gdk_screen_get_monitor_plug_name (gscreen, i)) == 0)
+				break;
+		}
+	}
+
+	if (i == n)
+	{
+		fprintf (stderr, "error: invalid monitor\n");
+		return FALSE;
+	}
+
+	rect = r;
+	printf("Using monitor %d (%s) %dx%d  +%d+%d\n",
+		i, gdk_screen_get_monitor_plug_name (gscreen, i),
+		rect.width, rect.height,
+		rect.x, rect.y
+	);
+}
+
+//
+// Prepare the window to host the duplicated screen (create the pixmap, subwindow)
+//
+// initialises:
+// 	offsest
+// 	pixmap
+// 	window
+//
+// may alter (fallback):
+// 	fullscreen
+void
+enable_window()
+{
+	offset.x = 0;
+	offset.y = 0;
+	fullscreen = !config.opt_window;
+	if (fullscreen) {
+		// get the monitor on which the window is displayed
+		int mon = gdk_screen_get_monitor_at_window(gscreen, gdkwin);
+		GdkRectangle wa;
+		gdk_screen_get_monitor_workarea(gscreen, mon, &wa);
+
+		if ((rect.x == wa.x) && (rect.y == wa.y)) {
+			// same as the source monitor
+			// -> do NOT go fullscreen
+			fullscreen = FALSE;
+			fprintf(stderr, "warning: cannot duplicate the output on the same monitor, falling back to window mode\n");
+		} else {
+			// go full screen
+			gdk_window_fullscreen (gdkwin);
+
+			// adjust the offset to draw the screen in the center of the window
+			int margin_x = wa.width - rect.width;
+			if (margin_x > 0) {
+				offset.x = margin_x / 2;
+			}
+			int margin_y = wa.height - rect.height;
+			if (margin_y > 0) {
+				offset.y = margin_y /2;
+			}
+		}
+	}
+
+	// resize the window
+	// 	- 400x300 if fullscreen
+	// 	- rect dimensions if not
+	GValue v = G_VALUE_INIT;
+	g_value_init (&v, G_TYPE_INT);
+
+	g_value_set_int (&v, (fullscreen ? 400 : rect.width));
+	g_object_set_property (G_OBJECT(gtkwin), "width-request", &v);
+
+	g_value_set_int (&v, (fullscreen ? 300 : rect.height));
+	g_object_set_property (G_OBJECT(gtkwin), "height-request", &v);
+
+
+	// create the pixmap
+	pixmap = XCreatePixmap (display, root_window, rect.width, rect.height, depth);
+	
+	// create the sub-window
+	{
+		XSetWindowAttributes attr;
+		attr.background_pixmap = pixmap;
+		window = XCreateWindow (display,
+					gdk_x11_window_get_xid(gdkwin),
+					offset.x, offset.y,
+					rect.width, rect.height,
+					0, CopyFromParent,
+					InputOutput, CopyFromParent,
+					CWBackPixmap, &attr);
+		XMapWindow(display, window);
+	}
+}
+
+gboolean enable()
+{
+	if (enabled) {
+		return TRUE;
+	}
+
+	if(!select_monitor()) {
+		return FALSE;
+	}
+
+	enable_window();
+
+	
+#ifdef HAVE_XI
+	enable_cursor_tracking();
+#endif
+
+#ifdef COPY_CURSOR
+	enable_copy_cursor();
+#endif
+
+#ifdef USE_XDAMAGE
+	enable_xdamage();
+#endif
+
+	XFlush (display);
+
+	// catch all X11 events
+	gdk_window_add_filter(NULL, on_x11_event, NULL);
+#ifdef USE_XDAMAGE
+	if (use_xdamage)
+	{
+		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
+	}
+#endif
+	{
+		g_timeout_add (40, &refresh_image, NULL);
+	}
+
+	// Redraw the window
+	XClearWindow(display, gdk_x11_window_get_xid(gdkwin));
+
+	enabled = TRUE;
+	return TRUE;
+}
+
 
 GOptionEntry option_entries[] = {
   { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
@@ -547,211 +837,12 @@ main (int argc, char *argv[])
 	}
 
 	// initialisation
-
-	GdkDisplay* gdisplay = gdk_display_get_default();
-	if (!gdisplay) {
-		fprintf (stderr, "error: no display available\n");
+	if (!init()) {
 		return 1;
 	}
-	GdkScreen* gscreen = gdk_display_get_default_screen (gdisplay);
-
-	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-	{
-		// load the icon
-		GError* err = NULL;
-		GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
-		if (pixbuf)
-		{
-			gtk_window_set_icon (GTK_WINDOW(gtkwin), pixbuf);
-			g_object_unref (pixbuf);
-		} else {
-			fprintf (stderr, "warning: no icon: %s\n", err->message);
-			g_error_free (err);
-		}
-	}
-	// quit on window closed
-	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-
-	// hide the window on click
-	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
-	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
-
-	display = gdk_x11_get_default_xdisplay();
-
-	screen = DefaultScreen (display);
-
-	depth = XDefaultDepth (display, screen);
-
-	// get the root window
-	root_window = XDefaultRootWindow(display);
-	
-	{
-		XGCValues values;
-		values.subwindow_mode = IncludeInferiors;
-
-		gc = XCreateGC (display, root_window, GCSubwindowMode, &values);
-		if(!gc) {
-			error ("XCreateGC() failed");
-			return 1;
-		}
-
-		values.line_width = 3;
-		values.foreground = 0xe0e0e0;
-		gc_white = XCreateGC (display, root_window, GCLineWidth | GCForeground, &values);
-		if(!gc_white) {
-			error ("XCreateGC() failed");
-			return 1;
-		}
-	}
-
-	// map my window
-	gtk_widget_show_all (gtkwin);
-
-	gdkwin = gtk_widget_get_window(gtkwin);
 
 	// activation
-	{
-		int n = gdk_screen_get_n_monitors (gscreen);
-		if ((n < 2) && !config.source_monitor_name) {
-			fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
-			return 1;
-		}
-
-		int i;
-		int min_area = INT_MAX;
-		GdkRectangle r;
-
-		if (config.source_monitor_name == NULL)
-		{
-			// find the smallest screen
-			for (i=0 ; i<n ; i++)
-			{
-				gdk_screen_get_monitor_geometry (gscreen, i, &r);
-				int area = r.width * r.height;
-				if (area < min_area)
-					min_area = area;
-			}
-		}
-
-		for (i=0 ; i<n ; i++)
-		{
-			gdk_screen_get_monitor_geometry (gscreen, i, &r);
-			int area = r.width * r.height;
-
-			if (config.source_monitor_name == NULL) {
-				if (area == min_area)
-					break;
-			} else {
-				if (strcmp (config.source_monitor_name, gdk_screen_get_monitor_plug_name (gscreen, i)) == 0)
-					break;
-			}
-		}
-
-		if (i == n)
-		{
-			fprintf (stderr, "error: invalid monitor\n");
-			return 1;
-		}
-
-		rect = r;
-		printf("Using monitor %d (%s) %dx%d  +%d+%d\n",
-			i, gdk_screen_get_monitor_plug_name (gscreen, i),
-			rect.width, rect.height,
-			rect.x, rect.y
-		);
-	}
-
-
-
-	offset.x = 0;
-	offset.y = 0;
-	fullscreen = !config.opt_window;
-	if (fullscreen) {
-		// get the monitor on which the window is displayed
-		int mon = gdk_screen_get_monitor_at_window(gscreen, gdkwin);
-		GdkRectangle wa;
-		gdk_screen_get_monitor_workarea(gscreen, mon, &wa);
-
-		if ((rect.x == wa.x) && (rect.y == wa.y)) {
-			// same as the source monitor
-			// -> do NOT go fullscreen
-			fullscreen = FALSE;
-			fprintf(stderr, "error: cannot duplicate the output on the same monitor, falling back to window mode\n");
-		} else {
-			// black background
-			GdkRGBA black = {0,0,0,1};
-			gtk_widget_override_background_color(gtkwin, 0, &black);
-
-			// go full screen
-			gdk_window_fullscreen (gdkwin);
-
-			// adjust the offset to draw the screen in the center of the window
-			int margin_x = wa.width - rect.width;
-			if (margin_x > 0) {
-				offset.x = margin_x / 2;
-			}
-			int margin_y = wa.height - rect.height;
-			if (margin_y > 0) {
-				offset.y = margin_y /2;
-			}
-		}
-	}
-
-
-	// create the pixmap
-	pixmap = XCreatePixmap (display, root_window, rect.width, rect.height, depth);
-	
-	// create the sub-window
-	{
-		XSetWindowAttributes attr;
-		attr.background_pixmap = pixmap;
-		window = XCreateWindow (display,
-					gdk_x11_window_get_xid(gdkwin),
-					offset.x, offset.y,
-					rect.width, rect.height,
-					0, CopyFromParent,
-					InputOutput, CopyFromParent,
-					CWBackPixmap, &attr);
-		XMapWindow(display, window);
-	}
-
-#ifdef HAVE_XI
-	init_cursor_tracking();
-#endif
-
-#ifdef COPY_CURSOR
-	init_copy_cursor();
-#endif
-
-#ifdef USE_XDAMAGE
-	init_xdamage();
-#endif
-
-	XFlush (display);
-
-	GValue v = G_VALUE_INIT;
-	g_value_init (&v, G_TYPE_INT);
-
-	g_value_set_int (&v, rect.width);
-	g_object_set_property (G_OBJECT(gtkwin), "width-request", &v);
-
-	g_value_set_int (&v, rect.height);
-	g_object_set_property (G_OBJECT(gtkwin), "height-request", &v);
-
-	// catch all X11 events
-	gdk_window_add_filter(NULL, on_x11_event, NULL);
-#ifdef USE_XDAMAGE
-	if (use_xdamage)
-	{
-		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
-	}
-#endif
-	{
-		g_timeout_add (40, &refresh_image, NULL);
-	}
-
-	// Redraw the window
-	XClearWindow(display, gdk_x11_window_get_xid(gdkwin));
+	enable();
 
 	gtk_main ();
 
