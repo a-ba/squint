@@ -52,6 +52,7 @@ def build (bld):
 	)
 
 	bld.install_as("${PREFIX}/share/squint/squint.png", "squint.png")
+	bld.install_as("${PREFIX}/share/squint/squint-disabled.png", "squint-disabled.png")
 	
 	if bld.env.TXT2TAGS and bld.env.GZIP:
 		bld(

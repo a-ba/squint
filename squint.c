@@ -33,6 +33,7 @@ gboolean fullscreen = FALSE;
 
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
+GtkStatusIcon* status_icon = NULL;
 Window root_window = 0;
 Window window = 0;
 Pixmap pixmap = -1;
@@ -42,6 +43,8 @@ GC gc_white = NULL;
 Display* display = NULL;
 GdkScreen* gscreen = NULL;
 int raised = 0;
+GdkPixbuf* icon_enabled  = NULL;
+GdkPixbuf* icon_disabled = NULL;
 
 GdkRectangle rect;
 GdkPoint offset;
@@ -125,6 +128,35 @@ on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 {
 	do_hide();
 	return FALSE;
+}
+
+gboolean on_status_icon_activated(GtkWidget* widget, gpointer data)
+{
+	return FALSE;
+}
+
+void
+refresh_status_icon()
+{
+	if (enabled) {
+		if (icon_enabled) {
+			gtk_status_icon_set_from_pixbuf(status_icon, icon_enabled);
+		} else {
+			gtk_status_icon_set_from_stock(status_icon, GTK_STOCK_YES);
+		}
+		gtk_status_icon_set_tooltip_text(status_icon,
+			"squint enabled"
+		);
+	} else {
+		if (icon_disabled) {
+			gtk_status_icon_set_from_pixbuf(status_icon, icon_disabled);
+		} else {
+			gtk_status_icon_set_from_stock(status_icon, GTK_STOCK_NO);
+		}
+			gtk_status_icon_set_tooltip_text(status_icon,
+			"squint disabled"
+		);
+	}
 }
 
 void
@@ -568,20 +600,28 @@ init()
 	}
 	gscreen = gdk_display_get_default_screen (gdisplay);
 
-	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+	// load the icons
 	{
-		// load the icon
 		GError* err = NULL;
-		GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
-		if (pixbuf)
+		icon_enabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
+		if (!icon_enabled)
 		{
-			gtk_window_set_icon (GTK_WINDOW(gtkwin), pixbuf);
-			g_object_unref (pixbuf);
-		} else {
+			fprintf (stderr, "warning: no icon: %s\n", err->message);
+			g_error_free (err);
+		}
+		icon_disabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint-disabled.png", &err);
+		if (!icon_disabled)
+		{
 			fprintf (stderr, "warning: no icon: %s\n", err->message);
 			g_error_free (err);
 		}
 	}
+
+	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+	if (icon_enabled) {
+		gtk_window_set_icon (GTK_WINDOW(gtkwin), icon_enabled);
+	}
+
 	// black background
 	GdkRGBA black = {0,0,0,1};
 	gtk_widget_override_background_color(gtkwin, 0, &black);
@@ -620,6 +660,10 @@ init()
 
 	gdkwin = gtk_widget_get_window(gtkwin);
 
+	// create the status icon in the tray
+	status_icon = gtk_status_icon_new();
+	refresh_status_icon();
+
 
 	// register the events
 	// - quit on window closed
@@ -628,6 +672,9 @@ init()
 	// - hide the window on click
 	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
 	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
+
+	// - status_icon clicked
+	g_signal_connect (status_icon, "activate", G_CALLBACK(on_status_icon_activated), NULL);
 
 	return TRUE;
 }
@@ -808,6 +855,7 @@ enable()
 	XClearWindow(display, gdk_x11_window_get_xid(gdkwin));
 
 	enabled = TRUE;
+	refresh_status_icon();
 	return TRUE;
 }
 
