@@ -83,6 +83,7 @@ int cursor_xhot=0;
 int cursor_yhot=0;
 uint32_t* cursor_pixels;
 uint8_t*  cursor_mask_pixels;
+#define CURSOR_MASK_SIZE (CURSOR_SIZE*CURSOR_SIZE/8)
 #endif
 
 void disable();
@@ -304,7 +305,7 @@ refresh_cursor_image()
 	}
 
 	// copy the cursor mask
-	memset(cursor_mask_pixels, 0, sizeof(cursor_mask_pixels));
+	memset(cursor_mask_pixels, 0, CURSOR_MASK_SIZE);
 	for(x=0 ; x<width ; x++)
 	{
 		for(y=0 ; y<height ; y++)
@@ -391,7 +392,7 @@ enable_copy_cursor()
 				CURSOR_SIZE, CURSOR_SIZE, 1);
 
 	// create an image for storing the mask
-	cursor_mask_pixels = (uint8_t*) malloc(CURSOR_SIZE*CURSOR_SIZE/8);
+	cursor_mask_pixels = (uint8_t*) malloc(CURSOR_MASK_SIZE);
 	cursor_mask_image = XCreateImage (display, NULL, 1, ZPixmap, 0, (char*)cursor_mask_pixels,
 				CURSOR_SIZE, CURSOR_SIZE, 8, CURSOR_SIZE/8);
 	if (!cursor_mask_image) {
