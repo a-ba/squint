@@ -586,12 +586,6 @@ init()
 	GdkRGBA black = {0,0,0,1};
 	gtk_widget_override_background_color(gtkwin, 0, &black);
 
-	// quit on window closed
-	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-
-	// hide the window on click
-	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
-	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 
 	display = gdk_x11_get_default_xdisplay();
 
@@ -625,6 +619,15 @@ init()
 	gtk_widget_show_all (gtkwin);
 
 	gdkwin = gtk_widget_get_window(gtkwin);
+
+
+	// register the events
+	// - quit on window closed
+	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
+
+	// - hide the window on click
+	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
+	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 
 	return TRUE;
 }
