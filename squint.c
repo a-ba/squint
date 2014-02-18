@@ -845,7 +845,7 @@ enable()
 	if (use_xdamage)
 	{
 		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
-	}
+	} else
 #endif
 	{
 		g_timeout_add (40, &refresh_image, NULL);
