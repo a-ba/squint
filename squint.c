@@ -88,7 +88,8 @@ error (const char* msg)
 	fprintf(stderr, "error: %s\n", msg);
 }
 
-void show()
+void
+show()
 {
 	if (!raised)
 	{
@@ -100,7 +101,8 @@ void show()
 	}
 }
 
-void do_hide()
+void
+do_hide()
 {
 	raised = 0;
 	if (fullscreen) {
@@ -109,7 +111,8 @@ void do_hide()
 	gdk_window_lower(gdkwin);
 }
 
-void hide()
+void
+hide()
 {
 	if(raised)
 	{
@@ -117,13 +120,15 @@ void hide()
 	}
 }
 
-gboolean on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
+gboolean
+on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 {
 	do_hide();
 	return FALSE;
 }
 
-void refresh_cursor_location()
+void
+refresh_cursor_location()
 {
 	Window root_return, w;
 	int wx, wy, mask;
@@ -220,7 +225,8 @@ gboolean _try_refresh_image_timeout (gpointer data)
 	return FALSE;
 }
 
-void try_refresh_image (Time timestamp)
+void
+try_refresh_image (Time timestamp)
 {
 	if ((timestamp >= next_refresh) || (timestamp < next_refresh - 1000)) {
 		if (refresh_timeout) {
@@ -238,7 +244,8 @@ void try_refresh_image (Time timestamp)
 
 
 #ifdef COPY_CURSOR
-void refresh_cursor_image()
+void
+refresh_cursor_image()
 {
 	XFixesCursorImage* img = XFixesGetCursorImage (display);
 	if (!img)
@@ -303,7 +310,8 @@ void refresh_cursor_image()
 // 	cursor_mask_gc
 // 	cursor_window
 //
-void enable_copy_cursor()
+void
+enable_copy_cursor()
 {
 	if (copy_cursor) {
 		return;
@@ -380,7 +388,8 @@ void enable_copy_cursor()
 }
 #endif
 
-GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
+GdkFilterReturn
+on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 {
 	XEvent* ev = (XEvent*)xevent;
 	XGenericEventCookie *cookie = &ev->xcookie;
@@ -448,7 +457,8 @@ GdkFilterReturn on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 // initialises:
 // 	xi_opcode
 //
-void enable_cursor_tracking()
+void
+enable_cursor_tracking()
 {
 	if (track_cursor)
 		return;
@@ -491,7 +501,8 @@ void enable_cursor_tracking()
 // 	damage
 // 	screen_region
 //
-void enable_xdamage()
+void
+enable_xdamage()
 {
 	if (use_xdamage) {
 		return;
@@ -521,7 +532,8 @@ void enable_xdamage()
 	use_xdamage = TRUE;
 }
 
-gboolean on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
+gboolean
+on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
 {
 	GdkEventConfigure* e = (GdkEventConfigure*) event;
 	gdkwin_extents.x = e->x;
@@ -546,7 +558,8 @@ gboolean on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer 
 }
 #endif
 
-gboolean init()
+gboolean
+init()
 {
 	GdkDisplay* gdisplay = gdk_display_get_default();
 	if (!gdisplay) {
@@ -621,7 +634,8 @@ gboolean init()
 //
 // initialises:
 // 	rect
-gboolean select_monitor()
+gboolean
+select_monitor()
 {
 	int n = gdk_screen_get_n_monitors (gscreen);
 	if ((n < 2) && !config.source_monitor_name) {
@@ -747,7 +761,8 @@ enable_window()
 	}
 }
 
-gboolean enable()
+gboolean
+enable()
 {
 	if (enabled) {
 		return TRUE;
