@@ -573,17 +573,20 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 	gdkwin_extents.width  = e->width;
 	gdkwin_extents.height = e->height;
 
-	if (gdk_rectangle_intersect(&gdkwin_extents, &rect, NULL)) {
-		if (window_mapped) {
-			window_mapped = 0;
-			XUnmapWindow(display, window);
-			XUnmapWindow(display, cursor_window);
-		}
-	} else {
-		if (!window_mapped) {
-			window_mapped = 1;
-			XMapWindow(display, window);
-			XMapWindow(display, cursor_window);
+	if (use_xdamage)
+	{
+		if (gdk_rectangle_intersect(&gdkwin_extents, &rect, NULL)) {
+			if (window_mapped) {
+				window_mapped = 0;
+				XUnmapWindow(display, window);
+				XUnmapWindow(display, cursor_window);
+			}
+		} else {
+			if (!window_mapped) {
+				window_mapped = 1;
+				XMapWindow(display, window);
+				XMapWindow(display, cursor_window);
+			}
 		}
 	}
 	return TRUE;
@@ -666,6 +669,8 @@ init()
 
 
 	// register the events
+	// - window moved/resized
+	g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
 	// - quit on window closed
 	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
 
@@ -841,11 +846,9 @@ enable()
 
 	// catch all X11 events
 	gdk_window_add_filter(NULL, on_x11_event, NULL);
+
 #ifdef USE_XDAMAGE
-	if (use_xdamage)
-	{
-		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
-	} else
+	if (!use_xdamage)
 #endif
 	{
 		g_timeout_add (40, &refresh_image, NULL);
