@@ -22,7 +22,8 @@
 
 // Config
 struct {
-	const char* source_monitor_name;
+	const char* src_monitor_name;
+	const char* dst_monitor_name;
 
 	gboolean opt_version, opt_window;
 } config;
@@ -47,7 +48,7 @@ GdkPixbuf* icon_enabled  = NULL;
 GdkPixbuf* icon_disabled = NULL;
 gint refresh_timer = 0;
 
-GdkRectangle rect;
+GdkRectangle src_rect, dst_rect;
 GdkPoint offset;
 GdkPoint cursor = {0, 0};
 
@@ -176,10 +177,10 @@ refresh_cursor_location()
 	XQueryPointer(display, root_window, &root_return, &w,
 			&c.x, &c.y, &wx, &wy, &mask);
 
-	c.x -= rect.x;
-	c.y -= rect.y;
+	c.x -= src_rect.x;
+	c.y -= src_rect.y;
 
-	if ((c.x<0) | (c.y<0) | (c.x>=rect.width) | (c.y>=rect.height))
+	if ((c.x<0) | (c.y<0) | (c.x>=src_rect.width) | (c.y>=src_rect.height))
 	{
 		// cursor is outside the duplicated screen
 		c.x = c.y = -1;
@@ -228,8 +229,8 @@ refresh_image (gpointer data)
 	}
 
 	XCopyArea (display, root_window, pixmap, gc,
-					rect.x, rect.y,
-					rect.width, rect.height,
+					src_rect.x, src_rect.y,
+					src_rect.width, src_rect.height,
 					0, 0);
 
 	// draw the cursor (crosshair)
@@ -494,7 +495,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 
 			// we do not refresh the window in case it overlaps with
 			// the duplicated screen (to avoid any amplification)
-			if (!xd_ev->more && !gdk_rectangle_intersect(&rect, &gdkwin_extents, NULL)) {
+			if (!xd_ev->more && !gdk_rectangle_intersect(&src_rect, &gdkwin_extents, NULL)) {
 				// check if damage intersects with the screen
 				GdkRectangle damage_rect;
 				damage_rect.x = xd_ev->area.x;
@@ -502,7 +503,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 				damage_rect.width  = xd_ev->area.width;
 				damage_rect.height = xd_ev->area.height;
 
-				if (gdk_rectangle_intersect(&damage_rect, &rect, NULL))
+				if (gdk_rectangle_intersect(&damage_rect, &src_rect, NULL))
 				{
 					try_refresh_image(xd_ev->timestamp);
 				}
@@ -606,10 +607,10 @@ enable_xdamage()
 	damage = XDamageCreate(display, root_window, XDamageReportBoundingBox);
 
 	XRectangle r;
-	r.x = rect.x;
-	r.y = rect.y;
-	r.width = rect.width;
-	r.height = rect.height;
+	r.x = src_rect.x;
+	r.y = src_rect.y;
+	r.width = src_rect.width;
+	r.height = src_rect.height;
 
 	screen_region = XFixesCreateRegion(display, &r, 1);
 
@@ -649,7 +650,7 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 #ifdef USE_XDAMAGE
 	if (use_xdamage)
 	{
-		if (gdk_rectangle_intersect(&gdkwin_extents, &rect, NULL)) {
+		if (gdk_rectangle_intersect(&gdkwin_extents, &src_rect, NULL)) {
 			if (window_mapped) {
 				window_mapped = 0;
 				XUnmapWindow(display, window);
@@ -762,12 +763,12 @@ init()
 // select which monitor is going to be duplicated
 //
 // initialises:
-// 	rect
+// 	src_rect
 gboolean
-select_monitor()
+select_monitors()
 {
 	int n = gdk_screen_get_n_monitors (gscreen);
-	if ((n < 2) && !config.source_monitor_name) {
+	if ((n < 2) && !config.src_monitor_name) {
 		fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
 		return FALSE;
 	}
@@ -776,7 +777,7 @@ select_monitor()
 	int min_area = INT_MAX;
 	GdkRectangle r;
 
-	if (config.source_monitor_name == NULL)
+	if (config.src_monitor_name == NULL)
 	{
 		// find the smallest screen
 		for (i=0 ; i<n ; i++)
@@ -793,11 +794,11 @@ select_monitor()
 		gdk_screen_get_monitor_geometry (gscreen, i, &r);
 		int area = r.width * r.height;
 
-		if (config.source_monitor_name == NULL) {
+		if (config.src_monitor_name == NULL) {
 			if (area == min_area)
 				break;
 		} else {
-			if (strcmp (config.source_monitor_name, gdk_screen_get_monitor_plug_name (gscreen, i)) == 0)
+			if (strcmp (config.src_monitor_name, gdk_screen_get_monitor_plug_name (gscreen, i)) == 0)
 				break;
 		}
 	}
@@ -809,11 +810,11 @@ select_monitor()
 		return FALSE;
 	}
 
-	rect = r;
+	src_rect = r;
 	printf("Using monitor %d (%s) %dx%d  +%d+%d\n",
 		i, gdk_screen_get_monitor_plug_name (gscreen, i),
-		rect.width, rect.height,
-		rect.x, rect.y
+		src_rect.width, src_rect.height,
+		src_rect.x, src_rect.y
 	);
 }
 
@@ -838,7 +839,7 @@ enable_window()
 		GdkRectangle wa;
 		gdk_screen_get_monitor_workarea(gscreen, mon, &wa);
 
-		if ((rect.x == wa.x) && (rect.y == wa.y)) {
+		if ((src_rect.x == wa.x) && (src_rect.y == wa.y)) {
 			// same as the source monitor
 			// -> do NOT go fullscreen
 			fullscreen = FALSE;
@@ -848,11 +849,11 @@ enable_window()
 			gdk_window_fullscreen (gdkwin);
 
 			// adjust the offset to draw the screen in the center of the window
-			int margin_x = wa.width - rect.width;
+			int margin_x = wa.width - src_rect.width;
 			if (margin_x > 0) {
 				offset.x = margin_x / 2;
 			}
-			int margin_y = wa.height - rect.height;
+			int margin_y = wa.height - src_rect.height;
 			if (margin_y > 0) {
 				offset.y = margin_y /2;
 			}
@@ -861,19 +862,19 @@ enable_window()
 
 	// resize the window
 	// 	- 400x300 if fullscreen
-	// 	- rect dimensions if not
+	// 	- src_rect dimensions if not
 	GValue v = G_VALUE_INIT;
 	g_value_init (&v, G_TYPE_INT);
 
-	g_value_set_int (&v, (fullscreen ? 400 : rect.width));
+	g_value_set_int (&v, (fullscreen ? 400 : src_rect.width));
 	g_object_set_property (G_OBJECT(gtkwin), "width-request", &v);
 
-	g_value_set_int (&v, (fullscreen ? 300 : rect.height));
+	g_value_set_int (&v, (fullscreen ? 300 : src_rect.height));
 	g_object_set_property (G_OBJECT(gtkwin), "height-request", &v);
 
 
 	// create the pixmap
-	pixmap = XCreatePixmap (display, root_window, rect.width, rect.height, depth);
+	pixmap = XCreatePixmap (display, root_window, src_rect.width, src_rect.height, depth);
 	
 	// create the sub-window
 	{
@@ -882,7 +883,7 @@ enable_window()
 		window = XCreateWindow (display,
 					gdk_x11_window_get_xid(gdkwin),
 					offset.x, offset.y,
-					rect.width, rect.height,
+					src_rect.width, src_rect.height,
 					0, CopyFromParent,
 					InputOutput, CopyFromParent,
 					CWBackPixmap, &attr);
@@ -907,7 +908,7 @@ enable()
 		return TRUE;
 	}
 
-	if(!select_monitor()) {
+	if(!select_monitors()) {
 		return FALSE;
 	}
 
@@ -998,7 +999,7 @@ main (int argc, char *argv[])
 	g_option_context_add_main_entries (context, option_entries, NULL);
 	g_option_context_add_group (context, gtk_get_option_group (TRUE));
 
-	if (!gtk_init_with_args (&argc, &argv, "[MonitorName]", option_entries, NULL, &err))
+	if (!gtk_init_with_args (&argc, &argv, "[SourceMonitor [DestinationMonitor]]", option_entries, NULL, &err))
 	{
 		error(err->message);
 		return 1;
@@ -1011,11 +1012,15 @@ main (int argc, char *argv[])
 
 	switch (argc)
 	{
-		case 1:
-			config.source_monitor_name = NULL;
-			break;
+		case 3:
+			if (strcmp("-", argv[2])) {
+				config.dst_monitor_name = argv[2];
+			}
 		case 2:
-			config.source_monitor_name = argv[1];
+			if (strcmp("-", argv[1])) {
+				config.src_monitor_name = argv[1];
+			}
+		case 1:
 			break;
 		default:
 			error("invalid arguments");
