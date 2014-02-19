@@ -31,6 +31,8 @@ struct {
 // State
 gboolean enabled = FALSE;
 gboolean fullscreen = FALSE;
+int src_monitor, dst_monitor;
+
 
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
@@ -759,63 +761,142 @@ init()
 	return TRUE;
 }
 
+// find a monitor by name
+// (return -1 if not found)
+gint
+find_monitor(GdkScreen* scr, const char* name)
+{
+	int n = gdk_screen_get_n_monitors (scr);
+	int i;
+	for (i=0 ; i<n ; i++)
+	{
+		if (strcmp(name, 
+			gdk_screen_get_monitor_plug_name(scr, i)) == 0)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+gboolean
+select_monitor_by_name(GdkScreen* scr, const char* name,
+		int* id, GdkRectangle* rect)
+{
+	*id = find_monitor(scr, name);
+	if (*id<0) {
+		fprintf(stderr, "monitor %s is not active", name);
+		return FALSE;
+	}
+	gdk_screen_get_monitor_geometry (scr, *id, rect);
+
+	return TRUE;
+}
+
+gboolean
+select_any_monitor_but(GdkScreen* scr, int* id, GdkRectangle* rect, const GdkRectangle* other_rect)
+{
+	int n = gdk_screen_get_n_monitors (scr);
+	int i;
+	for (i=0 ; i<n ; i++)
+	{
+		gdk_screen_get_monitor_geometry (scr, i, rect);
+		if (!other_rect || memcmp(rect, other_rect, sizeof(GdkRectangle)))
+		{
+			*id = i;
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 //
 // select which monitor is going to be duplicated
 //
 // initialises:
 // 	src_rect
+// 	src_monitor
+// 	dst_rect
+// 	dst_monitor
 gboolean
 select_monitors()
 {
-	int n = gdk_screen_get_n_monitors (gscreen);
+	int n, i;
+	src_monitor = dst_monitor = -1;
+
+	n = gdk_screen_get_n_monitors (gscreen);
 	if ((n < 2) && !config.src_monitor_name) {
 		fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
 		return FALSE;
 	}
 
-	int i;
-	int min_area = INT_MAX;
-	GdkRectangle r;
-
-	if (config.src_monitor_name == NULL)
-	{
-		// find the smallest screen
-		for (i=0 ; i<n ; i++)
-		{
-			gdk_screen_get_monitor_geometry (gscreen, i, &r);
-			int area = r.width * r.height;
-			if (area < min_area)
-				min_area = area;
-		}
+	// first we try to allocate the requested monitors
+	if (config.src_monitor_name
+		&& !select_monitor_by_name(gscreen, config.src_monitor_name, &src_monitor, &src_rect)) {
+			return FALSE;
 	}
-
-	for (i=0 ; i<n ; i++)
-	{
-		gdk_screen_get_monitor_geometry (gscreen, i, &r);
-		int area = r.width * r.height;
-
-		if (config.src_monitor_name == NULL) {
-			if (area == min_area)
-				break;
-		} else {
-			if (strcmp (config.src_monitor_name, gdk_screen_get_monitor_plug_name (gscreen, i)) == 0)
-				break;
-		}
+	if (config.dst_monitor_name
+		&& !select_monitor_by_name(gscreen, config.dst_monitor_name, &dst_monitor, &dst_rect)) {
+			return FALSE;
 	}
-
-	if (i == n)
+	if ((src_monitor>=0) && (dst_monitor>=0) && !memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
 	{
-		//TODO: report this error at startup
-		fprintf (stderr, "error: invalid monitor\n");
+		error("source and destination monitors are already cloning each other");
 		return FALSE;
 	}
 
-	src_rect = r;
-	printf("Using monitor %d (%s) %dx%d  +%d+%d\n",
-		i, gdk_screen_get_monitor_plug_name (gscreen, i),
+	// if the destination monitor is not yet decided, try to allocate one
+	// according to the panel name
+	if (dst_monitor<0) {
+		static GRegex* reg = NULL;
+		if (!reg) {
+			reg = g_regex_new("^e?DP[0-9]", 0, 0, NULL);
+		}
+		for (i=0 ; i<n ; i++) {
+			if (g_regex_match(reg, 
+				gdk_screen_get_monitor_plug_name(gscreen, i),
+				0, NULL))
+			{
+				// panel monitor
+
+				gdk_screen_get_monitor_geometry (gscreen, i, &dst_rect);
+
+				// ensure it is not the same as the dst monitor
+				if ((src_monitor < 0) ||
+					memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
+				{
+					// use it !
+					dst_monitor = i;
+					break;
+				}
+			}
+		}
+	}
+
+	// if still unsuccessful, then just select any monitor
+	if (src_monitor<0) {
+		select_any_monitor_but(gscreen, &src_monitor, &src_rect,
+			((dst_monitor>=0)?&dst_rect:NULL));
+	}
+	if (dst_monitor<0) {
+		select_any_monitor_but(gscreen, &dst_monitor, &dst_rect,
+			((src_monitor>=0)?&src_rect:NULL));
+	}
+
+	if ((src_monitor<0) || (dst_monitor<0)) {
+		error("could not select any monitor to be cloned");
+		return FALSE;
+	}
+	
+	printf("Cloning monitor %d (%s) %dx%d  +%d+%d into monitor %d (%s) %dx%d  +%d+%d\n",
+		src_monitor, gdk_screen_get_monitor_plug_name (gscreen, src_monitor),
 		src_rect.width, src_rect.height,
-		src_rect.x, src_rect.y
+		src_rect.x, src_rect.y,
+		dst_monitor, gdk_screen_get_monitor_plug_name (gscreen, dst_monitor),
+		dst_rect.width, dst_rect.height,
+		dst_rect.x, dst_rect.y
 	);
+	return TRUE;
 }
 
 //
@@ -1025,6 +1106,13 @@ main (int argc, char *argv[])
 		default:
 			error("invalid arguments");
 			return 1;
+	}
+
+	if (config.src_monitor_name && config.dst_monitor_name &&
+		strcmp(config.src_monitor_name, config.dst_monitor_name) == 0)
+	{
+		error("SourceMonitor and DestinationMonitor refer to the same monitor");
+		return 1;
 	}
 
 	// initialisation
