@@ -52,7 +52,7 @@ gint refresh_timer = 0;
 
 GdkRectangle src_rect, dst_rect;
 GdkPoint offset;
-GdkPoint cursor = {0, 0};
+GdkPoint cursor;
 
 #ifdef HAVE_XI
 gboolean track_cursor = FALSE;
@@ -171,7 +171,7 @@ refresh_status_icon()
 }
 
 void
-refresh_cursor_location()
+refresh_cursor_location(gboolean force)
 {
 	Window root_return, w;
 	int wx, wy, mask;
@@ -188,9 +188,19 @@ refresh_cursor_location()
 		c.x = c.y = -1;
 	}
 
-	if (memcmp(&cursor, &c, sizeof(cursor)) == 0) {
-		// nothing to do
-		return;
+	gboolean entered_screen, left_screen;
+
+	if (force) {
+		entered_screen = (c.x >=0);
+		left_screen = !entered_screen;
+	} else {
+		if (memcmp(&cursor, &c, sizeof(cursor)) == 0) {
+			// nothing to do
+			return;
+		}
+
+		entered_screen = (cursor.x<0) && (c.x>=0);
+		left_screen    = (cursor.x>=0) && (c.x<0);
 	}
 
 	// cursor was really moved
@@ -198,13 +208,20 @@ refresh_cursor_location()
 
 #ifdef COPY_CURSOR
 	if (copy_cursor) {
-		// move the cursor window to the new location of the cursor
-		XMoveWindow (display, cursor_window,
-				cursor.x - cursor_xhot + offset.x,
-				cursor.y - cursor_yhot + offset.y);
+		if (left_screen) {
+			XUnmapWindow(display, cursor_window);
+		} else {
+			if (entered_screen) {
+				XMapWindow(display, cursor_window);
+			}
+			// move the cursor window to the new location of the cursor
+			XMoveWindow (display, cursor_window,
+					cursor.x - cursor_xhot + offset.x,
+					cursor.y - cursor_yhot + offset.y);
 
-		// force redrawing the window
-		XClearWindow(display, cursor_window);
+			// force redrawing the window
+			XClearWindow(display, cursor_window);
+		}
 	}
 #endif
 
@@ -227,7 +244,7 @@ refresh_image (gpointer data)
 	if (!track_cursor)
 #endif
 	{
-		refresh_cursor_location();
+		refresh_cursor_location(FALSE);
 	}
 
 	XCopyArea (display, root_window, pixmap, gc,
@@ -424,7 +441,7 @@ enable_copy_cursor()
 	// refresh the cursor
 	refresh_cursor_image();
 
-	XMapWindow(display, cursor_window);
+	refresh_cursor_location(TRUE);
 
 	// request cursor change notifications
 	XFixesSelectCursorInput(display, gdk_x11_window_get_xid(gdkwin), XFixesCursorNotify);
@@ -471,7 +488,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		    &&	(cookie->evtype == XI_RawMotion))
 		{
 			// cursor was moved
-			refresh_cursor_location();
+			refresh_cursor_location(FALSE);
 			return GDK_FILTER_REMOVE;
 		}
 	}
@@ -907,10 +924,13 @@ select_monitors()
 // 	pixmap
 // 	window
 //	fullscreen
+//	cursor
 //
 void
 enable_window()
 {
+	cursor.x = -1;
+	cursor.y = -1;
 	offset.x = 0;
 	offset.y = 0;
 	fullscreen = !config.opt_window;
@@ -963,9 +983,7 @@ enable_window()
 	// possibly show the window
 	// (force refreshing the cursor position)
 	do_hide();
-	cursor.x = -2;
-	refresh_cursor_location();
-
+	refresh_cursor_location(TRUE);
 }
 
 void
