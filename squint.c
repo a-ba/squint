@@ -189,6 +189,21 @@ fix_offset()
 	}
 }
 
+gboolean
+on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
+{
+	GdkEventButton* ev = (GdkEventButton*) event;
+
+	if (enabled
+		&& (ev->type == GDK_2BUTTON_PRESS)
+		&& (ev->button = 1)
+	) {
+		gdk_window_unmaximize(gdkwin);
+		gdk_window_resize(gdkwin, src_rect.width, src_rect.height);
+	}
+	return FALSE;
+}
+
 gboolean on_status_icon_activated(GtkWidget* widget, gpointer data)
 {
 	if (enabled) {
@@ -776,6 +791,7 @@ init()
 	}
 
 	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_resizable(GTK_WINDOW(gtkwin), TRUE);
 	if (icon_enabled) {
 		gtk_window_set_icon (GTK_WINDOW(gtkwin), icon_enabled);
 	}
@@ -829,7 +845,7 @@ init()
 	// - quit on window closed
 	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
 
-	// - hide the window on click
+	// - resize the window to src monitor size on double click
 	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
 	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 
