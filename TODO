@@ -1,3 +1,7 @@
 Some ideas :
-- implement interactions (propagate input events on squint's window into the second screen)
+- adjust the offset in configure-event
+- implement a drop-down menu to show/edit the config at runtime
+- catch XRandr update events and react accordingly
+- completely hide the window when running in fullscreen mode
+- integration with the session manager / ensure there is only one instance
 - support Wayland (sometime in the future)
