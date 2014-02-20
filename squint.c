@@ -60,7 +60,6 @@ int xi_opcode = 0;
 #endif
 
 #ifdef USE_XDAMAGE
-GdkRectangle gdkwin_extents;
 gboolean use_xdamage = FALSE;
 int window_mapped = 1;
 int xdamage_event_base;
@@ -129,11 +128,65 @@ hide()
 	}
 }
 
-gboolean
-on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
+void
+adjust_offset_value(gint* offset, gint src, gint dst, gint cursor)
 {
-	do_hide();
-	return FALSE;
+	if (dst >= src)
+	{
+		// dst window is enough big 
+		// -> static offset
+		*offset = (dst - src) / 2;
+	} else {
+		// dynamic offset
+		if (cursor >= 0) {
+			// on-screen
+			int v = cursor + *offset;
+			
+			if (v < 0) {
+				*offset -= v;
+			} else if (v >= dst) {
+				*offset -= v - dst;
+			}
+		} else {
+			// off-screen
+			// -> update only if there is unused space
+			if (*offset > 0) {
+				*offset = 0;
+			} else {
+				int min_offset = dst - src;
+				if (*offset < min_offset) {
+					*offset = min_offset;
+				}
+			}
+		}
+	}
+}
+
+void
+fix_offset()
+{
+	GdkPoint offset_bak = {offset.x, offset.y};
+
+	// Adjust the offsets
+	adjust_offset_value(&offset.x, src_rect.width,  dst_rect.width,  cursor.x);
+	adjust_offset_value(&offset.y, src_rect.height, dst_rect.height, cursor.y);
+	
+	
+	if (memcmp(&offset, &offset_bak, sizeof(offset)))
+	{
+		// offset was updated
+		// -> move the windows
+		XMoveWindow(display, window, offset.x, offset.y);
+#ifdef COPY_CURSOR
+		if (copy_cursor) {
+			XMoveWindow (display, cursor_window,
+					cursor.x - cursor_xhot + offset.x,
+					cursor.y - cursor_yhot + offset.y);
+		}
+#endif
+		// force redrawing the window
+		XClearWindow(display, window);
+	}
 }
 
 gboolean on_status_icon_activated(GtkWidget* widget, gpointer data)
@@ -232,6 +285,8 @@ refresh_cursor_location(gboolean force)
 		/* lower the window when the pointer leaves the duplicated screen */
 		hide();
 	}
+
+	fix_offset();
 }
 
 gboolean
@@ -514,7 +569,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 
 			// we do not refresh the window in case it overlaps with
 			// the duplicated screen (to avoid any amplification)
-			if (!xd_ev->more && !gdk_rectangle_intersect(&src_rect, &gdkwin_extents, NULL)) {
+			if (!xd_ev->more && !gdk_rectangle_intersect(&src_rect, &dst_rect, NULL)) {
 				// check if damage intersects with the screen
 				GdkRectangle damage_rect;
 				damage_rect.x = xd_ev->area.x;
@@ -661,15 +716,21 @@ gboolean
 on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
 {
 	GdkEventConfigure* e = (GdkEventConfigure*) event;
-	gdkwin_extents.x = e->x;
-	gdkwin_extents.y = e->y;
-	gdkwin_extents.width  = e->width;
-	gdkwin_extents.height = e->height;
+	GdkRectangle rect;
+	rect.x = e->x;
+	rect.y = e->y;
+	rect.width  = e->width;
+	rect.height = e->height;
+
+	if(!fullscreen) {
+		memcpy(&dst_rect, &rect, sizeof(rect));
+		fix_offset();
+	}
 
 #ifdef USE_XDAMAGE
 	if (use_xdamage)
 	{
-		if (gdk_rectangle_intersect(&gdkwin_extents, &src_rect, NULL)) {
+		if (gdk_rectangle_intersect(&rect, &src_rect, NULL)) {
 			if (window_mapped) {
 				window_mapped = 0;
 				XUnmapWindow(display, window);
@@ -938,30 +999,17 @@ enable_window()
 	// resize the window
 	// 	- 400x300 if fullscreen
 	// 	- src_rect dimensions if not
-	GValue v = G_VALUE_INIT;
-	g_value_init (&v, G_TYPE_INT);
-
-	g_value_set_int (&v, (fullscreen ? 400 : src_rect.width));
-	g_object_set_property (G_OBJECT(gtkwin), "width-request", &v);
-
-	g_value_set_int (&v, (fullscreen ? 300 : src_rect.height));
-	g_object_set_property (G_OBJECT(gtkwin), "height-request", &v);
+	// 	- dst_rect -100 if too big
+	int w = (fullscreen ? 400 : src_rect.width);
+	int max_w = dst_rect.width - 100;
+	int h = (fullscreen ? 300 : src_rect.height);
+	int max_h = dst_rect.height - 100;
+	gtk_window_resize(GTK_WINDOW(gtkwin),
+		((w < max_w) ? w : max_w),
+		((h < max_h) ? h : max_h));
 
 	// move the window into the destination screen
 	gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x+50, dst_rect.y+50);
-
-	if (fullscreen) {
-		// adjust the offset to draw the screen in the center of the window
-		// TODO: do this in configure-even
-		int margin_x = dst_rect.width - src_rect.width;
-		if (margin_x > 0) {
-			offset.x = margin_x / 2;
-		}
-		int margin_y = dst_rect.height - src_rect.height;
-		if (margin_y > 0) {
-			offset.y = margin_y /2;
-		}
-	}
 
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, src_rect.width, src_rect.height, depth);
