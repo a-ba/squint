@@ -914,32 +914,6 @@ enable_window()
 	offset.x = 0;
 	offset.y = 0;
 	fullscreen = !config.opt_window;
-	if (fullscreen) {
-		// get the monitor on which the window is displayed
-		int mon = gdk_screen_get_monitor_at_window(gscreen, gdkwin);
-		GdkRectangle wa;
-		gdk_screen_get_monitor_workarea(gscreen, mon, &wa);
-
-		if ((src_rect.x == wa.x) && (src_rect.y == wa.y)) {
-			// same as the source monitor
-			// -> do NOT go fullscreen
-			fullscreen = FALSE;
-			fprintf(stderr, "warning: cannot duplicate the output on the same monitor, falling back to window mode\n");
-		} else {
-			// go full screen
-			gdk_window_fullscreen (gdkwin);
-
-			// adjust the offset to draw the screen in the center of the window
-			int margin_x = wa.width - src_rect.width;
-			if (margin_x > 0) {
-				offset.x = margin_x / 2;
-			}
-			int margin_y = wa.height - src_rect.height;
-			if (margin_y > 0) {
-				offset.y = margin_y /2;
-			}
-		}
-	}
 
 	// resize the window
 	// 	- 400x300 if fullscreen
@@ -953,6 +927,21 @@ enable_window()
 	g_value_set_int (&v, (fullscreen ? 300 : src_rect.height));
 	g_object_set_property (G_OBJECT(gtkwin), "height-request", &v);
 
+	// move the window into the destination screen
+	gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x+50, dst_rect.y+50);
+
+	if (fullscreen) {
+		// adjust the offset to draw the screen in the center of the window
+		// TODO: do this in configure-even
+		int margin_x = dst_rect.width - src_rect.width;
+		if (margin_x > 0) {
+			offset.x = margin_x / 2;
+		}
+		int margin_y = dst_rect.height - src_rect.height;
+		if (margin_y > 0) {
+			offset.y = margin_y /2;
+		}
+	}
 
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, src_rect.width, src_rect.height, depth);
@@ -970,11 +959,20 @@ enable_window()
 					CWBackPixmap, &attr);
 		XMapWindow(display, window);
 	}
+
+	// possibly show the window
+	// (force refreshing the cursor position)
+	do_hide();
+	cursor.x = -2;
+	refresh_cursor_location();
+
 }
 
 void
 disable_window()
 {
+	hide();
+
 	XDestroyWindow(display, window);
 	window = 0;
 
