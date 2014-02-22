@@ -1092,28 +1092,16 @@ select_monitors()
 	// if the destination monitor is not yet decided, try to allocate one
 	// according to the panel name
 	if (dst_monitor<0) {
-		static GRegex* reg = NULL;
-		if (!reg) {
-			reg = g_regex_new("^e?DP[0-9]", 0, 0, NULL);
-		}
-		for (i=0 ; i<n ; i++) {
-			if (g_regex_match(reg, 
-				gdk_screen_get_monitor_plug_name(gscreen, i),
-				0, NULL))
-			{
-				// panel monitor
+		int id = gdk_screen_get_primary_monitor(gscreen);
 
-				gdk_screen_get_monitor_geometry (gscreen, i, &dst_rect);
+		gdk_screen_get_monitor_geometry (gscreen, id, &dst_rect);
 
-				// ensure it is not the same as the dst monitor
-				if ((src_monitor < 0) ||
-					memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
-				{
-					// use it !
-					dst_monitor = i;
-					break;
-				}
-			}
+		// ensure it is not the same as the dst monitor
+		if ((src_monitor < 0) ||
+			memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
+		{
+			// use it !
+			dst_monitor = id;
 		}
 	}
 
