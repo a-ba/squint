@@ -14,6 +14,9 @@
 #ifdef USE_XDAMAGE
 #include <X11/extensions/Xdamage.h>
 #endif
+#ifdef HAVE_XRANDR
+#include <X11/extensions/Xrandr.h>
+#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -87,6 +90,10 @@ int cursor_yhot=0;
 uint32_t* cursor_pixels;
 uint8_t*  cursor_mask_pixels;
 #define CURSOR_MASK_SIZE (CURSOR_SIZE*CURSOR_SIZE/8)
+#endif
+
+#ifdef HAVE_XRANDR
+int xrandr_event_base = 0;
 #endif
 
 void disable();
@@ -771,6 +778,15 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		}
 	}
 #endif
+
+#ifdef HAVE_XRANDR
+	if (xrandr_event_base)
+	{
+		if (ev->type == xrandr_event_base + RRScreenChangeNotify) {
+			disable();
+		}
+	}
+#endif
 	return GDK_FILTER_CONTINUE;
 }
 
@@ -933,6 +949,18 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 	return TRUE;
 }
 
+#ifdef HAVE_XRANDR
+void
+init_xrandr()
+{
+	int error;
+	if (!XRRQueryExtension(display, &xrandr_event_base, &error)) {
+		return;
+	}
+
+	XRRSelectInput(display, root_window, RRScreenChangeNotifyMask);
+}
+#endif
 
 gboolean
 init()
@@ -1026,6 +1054,9 @@ init()
 	// - status_icon context menu
 	g_signal_connect (status_icon, "popup-menu", G_CALLBACK(on_status_icon_popup_menu), NULL);
 
+#ifdef HAVE_XRANDR
+	init_xrandr();
+#endif
 	return TRUE;
 }
 
