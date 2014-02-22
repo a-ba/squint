@@ -294,7 +294,7 @@ void populate_menu_with_monitor_config(GtkWidget* menu, const char* description,
 	char buff[64];
 	for (i=0 ; i<n ; i++)
 	{
-		const char* name = gdk_screen_get_monitor_plug_name(gscreen, i);
+		char* name = gdk_screen_get_monitor_plug_name(gscreen, i);
 		if (!*config_name && (i==active_id)) {
 			g_snprintf(buff, 64, "Auto (%s)", name);
 			gtk_menu_item_set_label(GTK_MENU_ITEM(auto_item), buff);
@@ -311,6 +311,8 @@ void populate_menu_with_monitor_config(GtkWidget* menu, const char* description,
 		g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
 				(gpointer) (userdata | (i&0xff)));
 		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+		g_free(name);
 	}
 }
 
@@ -1010,9 +1012,11 @@ find_monitor(GdkScreen* scr, const char* name)
 	int i;
 	for (i=0 ; i<n ; i++)
 	{
-		if (strcmp(name, 
-			gdk_screen_get_monitor_plug_name(scr, i)) == 0)
-		{
+		char* n = gdk_screen_get_monitor_plug_name(scr, i);
+		gboolean found = !strcmp(name, n);
+		g_free(n);
+
+		if (found) {
 			return i;
 		}
 	}
@@ -1127,15 +1131,6 @@ select_monitors()
 		error("could not select any monitor to be cloned");
 		return FALSE;
 	}
-	
-	printf("Cloning monitor %d (%s) %dx%d  +%d+%d into monitor %d (%s) %dx%d  +%d+%d\n",
-		src_monitor, gdk_screen_get_monitor_plug_name (gscreen, src_monitor),
-		src_rect.width, src_rect.height,
-		src_rect.x, src_rect.y,
-		dst_monitor, gdk_screen_get_monitor_plug_name (gscreen, dst_monitor),
-		dst_rect.width, dst_rect.height,
-		dst_rect.x, dst_rect.y
-	);
 	return TRUE;
 }
 
