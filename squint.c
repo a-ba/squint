@@ -295,7 +295,7 @@ void populate_menu_with_monitor_config(GtkWidget* menu, const char* description,
 	for (i=0 ; i<n ; i++)
 	{
 		char* name = gdk_screen_get_monitor_plug_name(gscreen, i);
-		if (!*config_name && (i==active_id)) {
+		if (enabled && !*config_name && (i==active_id)) {
 			g_snprintf(buff, 64, "Auto (%s)", name);
 			gtk_menu_item_set_label(GTK_MENU_ITEM(auto_item), buff);
 		}
@@ -303,7 +303,7 @@ void populate_menu_with_monitor_config(GtkWidget* menu, const char* description,
 		GdkRectangle r;
 		gdk_screen_get_monitor_geometry (gscreen, i, &r);
 
-		g_snprintf(buff, 64, "%s %d×%d+%d+%d", name , r.width, r.height);
+		g_snprintf(buff, 64, "%s %d×%d", name , r.width, r.height);
 
 		item = gtk_check_menu_item_new_with_label(buff);
 		gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),
