@@ -28,7 +28,7 @@ struct {
 	const char* src_monitor_name;
 	const char* dst_monitor_name;
 
-	gboolean opt_version, opt_window;
+	gboolean opt_version, opt_window, opt_disable;
 } config;
 
 // State
@@ -923,6 +923,10 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 	rect.width  = e->width;
 	rect.height = e->height;
 
+	if(!enabled) {
+		return TRUE;
+	}
+
 	if(!fullscreen) {
 		memcpy(&dst_rect, &rect, sizeof(rect));
 		fix_offset();
@@ -1032,6 +1036,9 @@ init()
 	gtk_widget_show_all (gtkwin);
 
 	gdkwin = gtk_widget_get_window(gtkwin);
+
+	// hide it
+	gdk_window_lower(gdkwin);
 
 	// create the status icon in the tray
 	status_icon = gtk_status_icon_new();
@@ -1329,6 +1336,7 @@ disable()
 
 
 GOptionEntry option_entries[] = {
+  { "disable",	'd',	0,	G_OPTION_ARG_NONE,	&config.opt_disable,	"Do not enable screen duplication at startup", NULL},
   { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
   { "window",	'w',	0,	G_OPTION_ARG_NONE,	&config.opt_window,	"Run inside a window instead of going fullscreen", NULL},
   { NULL }
@@ -1387,7 +1395,9 @@ main (int argc, char *argv[])
 	}
 
 	// activation
-	enable();
+	if (!config.opt_disable) {
+		enable();
+	}
 
 	gtk_main ();
 

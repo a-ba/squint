@@ -16,7 +16,7 @@ squint - duplicate a monitor output into a X11 window
 
 = SYNOPSIS =[synopsis]
 
-**squint** [ -vw ] [ MONITOR_NAME ]
+**squint** [ -dvw ] [ MONITOR_NAME ]
 
 = DESCRIPTION =[description]
 
@@ -29,6 +29,8 @@ making any kind of demonstration) on multiple monitors in the same time
 available to do any other stuff. 
 
 = OPTIONS =
+: **-d --disable**
+do not enable screen duplication at startup
 : **-v**
 display version information and exit
 : **-w**
