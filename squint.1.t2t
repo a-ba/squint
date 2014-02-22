@@ -29,11 +29,11 @@ making any kind of demonstration) on multiple monitors in the same time
 available to do any other stuff. 
 
 = OPTIONS =
-: **-d --disable**
+: **-d, --disable**
 do not enable screen duplication at startup
-: **-v**
+: **-v, --version**
 display version information and exit
-: **-w**
+: **-w, --window**
 run in an ordinary window instead of going fullscreen
 :
 
