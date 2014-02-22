@@ -228,6 +228,13 @@ on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 	return FALSE;
 }
 
+gboolean
+on_window_delete_event(GtkWidget* widget, GdkEvent* event, gpointer data)
+{
+	disable();
+	return TRUE;
+}
+
 #define ITEM_MASK		0xffffff00
 #define ITEM_ENABLE		(1<<8)
 #define ITEM_FULLSCREEN		(1<<9)
@@ -993,17 +1000,6 @@ init()
 		}
 	}
 
-	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-	gtk_window_set_resizable(GTK_WINDOW(gtkwin), TRUE);
-	if (icon_enabled) {
-		gtk_window_set_icon (GTK_WINDOW(gtkwin), icon_enabled);
-	}
-
-	// black background
-	GdkRGBA black = {0,0,0,1};
-	gtk_widget_override_background_color(gtkwin, 0, &black);
-
-
 	display = gdk_x11_get_default_xdisplay();
 
 	screen = DefaultScreen (display);
@@ -1013,6 +1009,7 @@ init()
 	// get the root window
 	root_window = XDefaultRootWindow(display);
 	
+	// create the graphic contextes
 	{
 		XGCValues values;
 		values.subwindow_mode = IncludeInferiors;
@@ -1032,34 +1029,18 @@ init()
 		}
 	}
 
-	// map my window
-	gtk_widget_show_all (gtkwin);
-
-	gdkwin = gtk_widget_get_window(gtkwin);
-
-	// hide it
-	gdk_window_lower(gdkwin);
-
 	// create the status icon in the tray
 	status_icon = gtk_status_icon_new();
 	refresh_status_icon();
 	menu = gtk_menu_new();
 
 	// register the events
-	// - window moved/resized
-	g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
-	// - quit on window closed
-	g_signal_connect (gtkwin, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-
-	// - resize the window to src monitor size on double click
-	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
-	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
-
 	// - status_icon clicked
 	g_signal_connect (status_icon, "activate", G_CALLBACK(on_status_icon_activated), NULL);
 
 	// - status_icon context menu
 	g_signal_connect (status_icon, "popup-menu", G_CALLBACK(on_status_icon_popup_menu), NULL);
+
 
 #ifdef HAVE_XRANDR
 	init_xrandr();
@@ -1192,6 +1173,8 @@ select_monitors()
 // initialises:
 // 	offset
 // 	pixmap
+// 	gtkwin
+// 	gdkwin
 // 	window
 //	fullscreen
 //	cursor
@@ -1204,6 +1187,36 @@ enable_window()
 	offset.x = 0;
 	offset.y = 0;
 	fullscreen = !config.opt_window;
+
+	// create the window
+	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_resizable(GTK_WINDOW(gtkwin), TRUE);
+	if (icon_enabled) {
+		gtk_window_set_icon (GTK_WINDOW(gtkwin), icon_enabled);
+	}
+
+	// black background
+	GdkRGBA black = {0,0,0,1};
+	gtk_widget_override_background_color(gtkwin, 0, &black);
+
+	// map my window
+	gtk_widget_show_all (gtkwin);
+
+	gdkwin = gtk_widget_get_window(gtkwin);
+
+	// hide it
+	gdk_window_lower(gdkwin);
+
+	// register the events
+	// - window moved/resized
+	g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
+	// - quit on window closed
+	g_signal_connect (gtkwin, "delete-event", G_CALLBACK (on_window_delete_event), NULL);
+
+	// - resize the window to src monitor size on double click
+	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
+	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
+
 
 	// resize the window
 	// 	- 400x300 if fullscreen
@@ -1246,13 +1259,15 @@ enable_window()
 void
 disable_window()
 {
-	hide();
-
 	XDestroyWindow(display, window);
 	window = 0;
 
 	XFreePixmap(display, pixmap);
 	pixmap = 0;
+	
+	gtk_widget_destroy(gtkwin);
+	gdkwin = NULL;
+	gtkwin = NULL;
 }
 
 gboolean
@@ -1400,8 +1415,6 @@ main (int argc, char *argv[])
 	}
 
 	gtk_main ();
-
-	XFreePixmap (display, pixmap);
 
 	return 0;
 }
