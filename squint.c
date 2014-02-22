@@ -1375,6 +1375,8 @@ main (int argc, char *argv[])
 		return 1;
 	}
 
+	g_option_context_free(context);
+
 	if (config.opt_version) {
 		puts(APPNAME " " VERSION);
 		return 0;
