@@ -37,6 +37,7 @@ int src_monitor, dst_monitor;
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
 GtkStatusIcon* status_icon = NULL;
+GtkWidget* menu = NULL;
 Window root_window = 0;
 Window window = 0;
 Pixmap pixmap = -1;
@@ -204,7 +205,64 @@ on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 	return FALSE;
 }
 
-gboolean on_status_icon_activated(GtkWidget* widget, gpointer data)
+#define ITEM_MASK		0xffffff00
+#define ITEM_ENABLE		(1<<8)
+#define ITEM_FULLSCREEN		(1<<9)
+#define ITEM_QUIT		(1<<10)
+#define ITEM_SRC_MONITOR	(1<<11)
+#define ITEM_DST_MONITOR	(1<<12)
+#define ITEM_AUTO		0xff
+
+void
+update_monitor_config(const char** monitor_name, int id)
+{
+	if (*monitor_name) {
+		g_free((gpointer)*monitor_name);
+	}
+	*monitor_name = NULL;
+
+	if (id != ITEM_AUTO)
+	{
+		*monitor_name = gdk_screen_get_monitor_plug_name(gscreen, id);
+	}
+}
+
+void
+on_menu_item_activate(gpointer pointer, gpointer user_data)
+{
+	intptr_t code = (intptr_t)user_data;
+	switch (code & ITEM_MASK)
+	{
+	case ITEM_ENABLE:
+		on_status_icon_activated(NULL, NULL);
+		break;
+	
+	case ITEM_FULLSCREEN:
+		config.opt_window = !config.opt_window;
+		goto reset;
+
+	case ITEM_QUIT:
+		gtk_main_quit();
+		break;
+	
+	case ITEM_SRC_MONITOR:
+		update_monitor_config(&config.src_monitor_name, code & ITEM_AUTO);
+		goto reset;
+		
+	case ITEM_DST_MONITOR:
+		update_monitor_config(&config.dst_monitor_name, code & ITEM_AUTO);
+		goto reset;
+	}
+	return;
+reset:
+	if (enabled) {
+		disable();
+		enable();
+	}
+}
+
+gboolean
+on_status_icon_activated(GtkWidget* widget, gpointer data)
 {
 	if (enabled) {
 		disable();
@@ -212,6 +270,90 @@ gboolean on_status_icon_activated(GtkWidget* widget, gpointer data)
 		enable();
 	}
 	return FALSE;
+}
+
+void populate_menu_with_monitor_config(GtkWidget* menu, const char* description, const char** config_name, int active_id, intptr_t userdata)
+{
+	GtkWidget* item;
+
+	item = gtk_separator_menu_item_new();
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+	item = gtk_menu_item_new_with_label(description);
+	gtk_widget_set_sensitive(item, FALSE);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+	GtkWidget* auto_item;
+	auto_item = gtk_check_menu_item_new_with_label("Auto");
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(auto_item), !*config_name);
+	g_signal_connect (auto_item, "activate", G_CALLBACK (on_menu_item_activate),
+			(gpointer) (userdata | ITEM_AUTO));
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), auto_item);
+
+	int i, n = gdk_screen_get_n_monitors (gscreen);
+	char buff[64];
+	for (i=0 ; i<n ; i++)
+	{
+		const char* name = gdk_screen_get_monitor_plug_name(gscreen, i);
+		if (!*config_name && (i==active_id)) {
+			g_snprintf(buff, 64, "Auto (%s)", name);
+			gtk_menu_item_set_label(GTK_MENU_ITEM(auto_item), buff);
+		}
+
+		GdkRectangle r;
+		gdk_screen_get_monitor_geometry (gscreen, i, &r);
+
+		g_snprintf(buff, 64, "%s %d×%d+%d+%d", name , r.width, r.height);
+
+		item = gtk_check_menu_item_new_with_label(buff);
+		gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),
+				(*config_name && !strcmp(*config_name, name)));
+		g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
+				(gpointer) (userdata | (i&0xff)));
+		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	}
+}
+
+void
+destroy_widget(GtkWidget* widget, gpointer data)
+{
+	gtk_widget_destroy(widget);
+}
+
+void
+on_status_icon_popup_menu(GtkStatusIcon* widget, guint button, guint activate_time, gpointer data)
+{
+	GtkWidget* item;
+
+	// clear the previous menu
+	gtk_container_foreach(GTK_CONTAINER(menu), &destroy_widget, NULL);
+
+	item = gtk_menu_item_new_with_label("Squint");
+	gtk_widget_set_sensitive(item, FALSE);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+	item = gtk_check_menu_item_new_with_label("Enabled");
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), enabled);
+	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
+			(gpointer) ITEM_ENABLE);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+	item = gtk_check_menu_item_new_with_label("Fullscreen");
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_window);
+	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
+			(gpointer) ITEM_FULLSCREEN);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	
+	item = gtk_image_menu_item_new_from_stock(GTK_STOCK_QUIT, NULL);
+	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
+			(gpointer) ITEM_QUIT);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+	populate_menu_with_monitor_config(menu, "Source monitor", &config.src_monitor_name, src_monitor, ITEM_SRC_MONITOR);
+	populate_menu_with_monitor_config(menu, "Destination monitor", &config.dst_monitor_name, dst_monitor, ITEM_DST_MONITOR);
+
+	gtk_widget_show_all(menu);
+	gtk_menu_popup(GTK_MENU(menu), NULL, NULL, NULL, NULL, button, activate_time);
 }
 
 void
@@ -763,6 +905,7 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 	return TRUE;
 }
 
+
 gboolean
 init()
 {
@@ -837,7 +980,7 @@ init()
 	// create the status icon in the tray
 	status_icon = gtk_status_icon_new();
 	refresh_status_icon();
-
+	menu = gtk_menu_new();
 
 	// register the events
 	// - window moved/resized
@@ -851,6 +994,9 @@ init()
 
 	// - status_icon clicked
 	g_signal_connect (status_icon, "activate", G_CALLBACK(on_status_icon_activated), NULL);
+
+	// - status_icon context menu
+	g_signal_connect (status_icon, "popup-menu", G_CALLBACK(on_status_icon_popup_menu), NULL);
 
 	return TRUE;
 }
@@ -1175,11 +1321,11 @@ main (int argc, char *argv[])
 	{
 		case 3:
 			if (strcmp("-", argv[2])) {
-				config.dst_monitor_name = argv[2];
+				config.dst_monitor_name = g_strdup(argv[2]);
 			}
 		case 2:
 			if (strcmp("-", argv[1])) {
-				config.src_monitor_name = argv[1];
+				config.src_monitor_name = g_strdup(argv[1]);
 			}
 		case 1:
 			break;
