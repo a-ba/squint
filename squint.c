@@ -92,6 +92,22 @@ uint8_t*  cursor_mask_pixels;
 void disable();
 
 void
+show_about_dialog()
+{
+	static const char* authors[] = { "Anthony Baire", NULL };
+	gtk_show_about_dialog(
+		NULL,
+		"copyright",	"© 2013, 2014 Anthony Baire",
+		"license-type",	GTK_LICENSE_GPL_3_0,
+		"logo",		icon_enabled,
+		"program-name",	APPNAME " " VERSION,
+		"website",	"https://bitbucket.org/a_ba/squint",
+		"website-label","https://bitbucket.org/a_ba/squint",
+		NULL
+	);
+}
+
+void
 error (const char* msg)
 {
 	fprintf(stderr, "error: %s\n", msg);
@@ -211,6 +227,7 @@ on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 #define ITEM_QUIT		(1<<10)
 #define ITEM_SRC_MONITOR	(1<<11)
 #define ITEM_DST_MONITOR	(1<<12)
+#define ITEM_ABOUT		(1<<13)
 #define ITEM_AUTO		0xff
 
 void
@@ -252,6 +269,10 @@ on_menu_item_activate(gpointer pointer, gpointer user_data)
 	case ITEM_DST_MONITOR:
 		update_monitor_config(&config.dst_monitor_name, code & ITEM_AUTO);
 		goto reset;
+	
+	case ITEM_ABOUT:
+		show_about_dialog();
+		break;
 	}
 	return;
 reset:
@@ -346,6 +367,11 @@ on_status_icon_popup_menu(GtkStatusIcon* widget, guint button, guint activate_ti
 			(gpointer) ITEM_FULLSCREEN);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 	
+	item = gtk_image_menu_item_new_from_stock(GTK_STOCK_ABOUT, NULL);
+	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
+			(gpointer) ITEM_ABOUT);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
 	item = gtk_image_menu_item_new_from_stock(GTK_STOCK_QUIT, NULL);
 	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
 			(gpointer) ITEM_QUIT);
