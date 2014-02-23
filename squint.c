@@ -367,15 +367,19 @@ void populate_menu_with_monitor_config(GtkWidget* menu, const char* description,
 		g_snprintf(buff, 64, "%s %d×%d", name , r.width, r.height);
 
 		item = gtk_check_menu_item_new_with_label(buff);
-		gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),
-				(*config_name && !strcmp(*config_name, name)));
+		
+		if (*config_name && !strcmp(*config_name, name)) {
+			current = i;
+			gtk_check_menu_item_set_active(
+				GTK_CHECK_MENU_ITEM(item), TRUE);
+		}
 		g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
 				(gpointer) (userdata | (i&0xff)));
 		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 		g_free(name);
 	}
-	if ((current < 1) && *config_name) {
+	if ((current<0) && *config_name) {
 		// choosen monitor is not active
 		item = gtk_check_menu_item_new_with_label(*config_name);
 		gtk_check_menu_item_set_active(
