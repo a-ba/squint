@@ -77,10 +77,12 @@ Time next_refresh=0;
 gint refresh_timeout=0;
 #endif
 
+#ifdef HAVE_XFIXES
+int xfixes_event_base;
+#endif
+
 #ifdef COPY_CURSOR
 #define CURSOR_SIZE 64
-int xfixes_event_base;
-
 int copy_cursor = 0;
 Window cursor_window = 0;
 Pixmap cursor_pixmap = 0;
@@ -564,6 +566,7 @@ refresh_image (gpointer data)
 	return TRUE;
 }
 
+#ifdef USE_XDAMAGE
 void try_refresh_image (Time timestamp);
 gboolean _try_refresh_image_timeout (gpointer data)
 {
@@ -591,6 +594,7 @@ try_refresh_image (Time timestamp)
 		refresh_timeout = g_timeout_add (next_refresh - timestamp, _try_refresh_image_timeout, NULL);
 	}
 }
+#endif
 
 
 
@@ -983,13 +987,21 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 			if (window_mapped) {
 				window_mapped = 0;
 				XUnmapWindow(display, window);
-				XUnmapWindow(display, cursor_window);
+#ifdef COPY_CURSOR
+				if(copy_cursor) {
+					XUnmapWindow(display, cursor_window);
+				}
+#endif
 			}
 		} else {
 			if (!window_mapped) {
 				window_mapped = 1;
 				XMapWindow(display, window);
-				XMapWindow(display, cursor_window);
+#ifdef COPY_CURSOR
+				if(copy_cursor) {
+					XMapWindow(display, cursor_window);
+				}
+#endif
 			}
 		}
 	}
@@ -1357,8 +1369,8 @@ enable()
 	// catch all X11 events
 	gdk_window_add_filter(NULL, on_x11_event, NULL);
 
-#ifdef USE_XDAMAGE
-	if (!use_xdamage)
+#if USE_XDAMAGE && COPY_CURSOR
+	if (!(use_xdamage && track_cursor))
 #endif
 	{
 		refresh_timer = g_timeout_add (40, &refresh_image, NULL);
@@ -1375,10 +1387,12 @@ enable()
 void
 disable()
 {
+#ifdef USE_XDAMAGE
 	if (refresh_timeout) {
 		g_source_remove(refresh_timeout);
 		refresh_timeout = 0;
 	}
+#endif
 	if (refresh_timer) {
 		g_source_remove(refresh_timer);
 		refresh_timer = 0;
