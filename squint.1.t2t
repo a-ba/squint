@@ -1,6 +1,6 @@
 SQUINT
 
-Oct, 2013
+Feb, 2014
 
 %!target: man
 %!encoding: UTF-8
@@ -16,7 +16,7 @@ squint - duplicate a monitor output into a X11 window
 
 = SYNOPSIS =[synopsis]
 
-**squint** [ -dvw ] [ -l N ] [ -r N ] [ MONITOR_NAME ]
+**squint** [ -dvw ] [ -l N ] [ -r N ] [ SourceMonitorName ] [ DestinationMonitorName ]
 
 = DESCRIPTION =[description]
 
@@ -43,27 +43,43 @@ run in an ordinary window instead of going fullscreen
 
 = USAGE =
 
-By default **squint** assumes that the external screen is the monitor having
-the smallest resolution. This should be the most typical configuration
-(duplicating a monitor into a smaller one looks less interesting). If you are
-in that case, then you just need to run the command without any parameter:
+Squint duplicates the content of a source monitor into a destination monitor.
 
+By default the destinatiom monitor is the primary monitor (as reported by the
+window manager) and the source monitor will the other active monitor (or the
+first other monitor detected in case there more than 2 active monitors).
+
+In most cases you can just run the command without any parameter:
 ```
 	squint
 ```
 
-If the monitor you wish to duplicate is not the smallest one or if there is
-only one monitor (maybe you enjoy the Larsen effect), then you need to state
-which monitor (as listed by the **xrandr** command) shall be duplicated.
+If you want to force using a monitor at startup you can give their name (as
+listed by the **xrandr** command) in the command line or just **-** to use
+autodetection.
 
+= SYSTEM TRAY ICON =
+
+An icon is displayed in the system tray permit user interactions at runtime.
+Click on it to enable or disable squint's activity. A right click opens a menu.
+
+
+= EXAMPLES =
+
+source=HDMI, destination=auto-detected
 ```
 	squint HDMI1
 ```
 
-The window displayed by **squint** provides no interactions at all, it is just
-a view of the monitor output. In order to interact with the content displayed
-in this monitor, the pointer must be moved into this monitor.
+source=auto-detected, destination=VGA1
+```
+	squint - VGA1
+```
 
+source=HDMI1, destination=VGA1
+```
+	squint HDMI1 VGA1
+```
 
 = AUTHOR =[author]
 

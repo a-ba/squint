@@ -8,7 +8,7 @@
 </HEAD><BODY BGCOLOR="white" TEXT="black">
 <CENTER>
 <H1>SQUINT</H1>
-<FONT SIZE="4">Oct, 2013</FONT>
+<FONT SIZE="4">Feb, 2014</FONT>
 </CENTER>
 
 <P></P>
@@ -21,6 +21,8 @@
   <LI><A HREF="#description">DESCRIPTION</A>
   <LI><A HREF="#toc4">OPTIONS</A>
   <LI><A HREF="#toc5">USAGE</A>
+  <LI><A HREF="#toc6">SYSTEM TRAY ICON</A>
+  <LI><A HREF="#toc7">EXAMPLES</A>
   <LI><A HREF="#author">AUTHOR</A>
   <LI><A HREF="#bugs">BUGS</A>
   <LI><A HREF="#copyright">COPYRIGHT</A>
@@ -42,7 +44,7 @@ squint - duplicate a monitor output into a X11 window
 <H1>SYNOPSIS</H1>
 
 <P>
-<B>squint</B> [ -vw ] [ MONITOR_NAME ]
+<B>squint</B> [ -dvw ] [ -l N ] [ -r N ] [ SourceMonitorName ] [ DestinationMonitorName ]
 </P>
 
 <A NAME="description"></A>
@@ -63,9 +65,15 @@ available to do any other stuff.
 <H1>OPTIONS</H1>
 
 <DL>
-<DT><B>-v</B></DT><DD>
+<DT><B>-d, --disable</B></DT><DD>
+do not enable screen duplication at startup
+<DT><B>-l N, --limit N</B></DT><DD>
+limit the refresh rate to N frames per second (default is 50fps), use '-l' 0 to disable limitation (not recommended)
+<DT><B>-r N, --rate N</B></DT><DD>
+Use fixed refresh rate of N frames per second (default to 25fps when the XDamage extension is not available)
+<DT><B>-v, --version</B></DT><DD>
 display version information and exit
-<DT><B>-w</B></DT><DD>
+<DT><B>-w, --window</B></DT><DD>
 run in an ordinary window instead of going fullscreen
 </DL>
 
@@ -73,10 +81,15 @@ run in an ordinary window instead of going fullscreen
 <H1>USAGE</H1>
 
 <P>
-By default <B>squint</B> assumes that the external screen is the monitor having
-the smallest resolution. This should be the most typical configuration
-(duplicating a monitor into a smaller one looks less interesting). If you are
-in that case, then you just need to run the command without any parameter:
+Squint duplicates the content of a source monitor into a destination monitor.
+</P>
+<P>
+By default the destinatiom monitor is the primary monitor (as reported by the
+window manager) and the source monitor will the other active monitor (or the
+first other monitor detected in case there more than 2 active monitors).
+</P>
+<P>
+In most cases you can just run the command without any parameter:
 </P>
 
 <PRE>
@@ -84,9 +97,24 @@ in that case, then you just need to run the command without any parameter:
 </PRE>
 
 <P>
-If the monitor you wish to duplicate is not the smallest one or if there is
-only one monitor (maybe you enjoy the Larsen effect), then you need to state
-which monitor (as listed by the <B>xrandr</B> command) shall be duplicated.
+If you want to force using a monitor at startup you can give their name (as
+listed by the <B>xrandr</B> command) in the command line or just <B>-</B> to use
+autodetection.
+</P>
+
+<A NAME="toc6"></A>
+<H1>SYSTEM TRAY ICON</H1>
+
+<P>
+An icon is displayed in the system tray permit user interactions at runtime.
+Click on it to enable or disable squint's activity. A right click opens a menu.
+</P>
+
+<A NAME="toc7"></A>
+<H1>EXAMPLES</H1>
+
+<P>
+source=HDMI, destination=auto-detected
 </P>
 
 <PRE>
@@ -94,10 +122,20 @@ which monitor (as listed by the <B>xrandr</B> command) shall be duplicated.
 </PRE>
 
 <P>
-The window displayed by <B>squint</B> provides no interactions at all, it is just
-a view of the monitor output. In order to interact with the content displayed
-in this monitor, the pointer must be moved into this monitor.
+source=auto-detected, destination=VGA1
 </P>
+
+<PRE>
+  	squint - VGA1
+</PRE>
+
+<P>
+source=HDMI1, destination=VGA1
+</P>
+
+<PRE>
+  	squint HDMI1 VGA1
+</PRE>
 
 <A NAME="author"></A>
 <H1>AUTHOR</H1>

@@ -9,13 +9,21 @@ INTRODUCTION
 	in the same time without cloning the entire screen. The laptop's panel
 	remains fully available to do any other stuff. 
 
-REQUIREMENTS
+DEPENDENCIES
 	
-	- gtk+  (version 2 or 3)	
+	Mandatory:
+		- gtk+ (>=3.0)
+		- python2 (>= 2.6)
 
-	- python
+	Optional (but recommended):
+		- libxdamage
+		- libxext
+		- libxi (>=1.5)
+		- libxrandr
+		- libxfixes
+		- libnotify
 
-	- txt2tags gzip  (optional, needed for the man page)
+		- txt2tags gzip  (for the man page)
 
 INSTALLATION
 
