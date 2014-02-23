@@ -991,14 +991,14 @@ init()
 		icon_enabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
 		if (!icon_enabled)
 		{
-			fprintf (stderr, "warning: no icon: %s\n", err->message);
-			g_error_free (err);
+			fprintf (stderr, "warning: %s\n", err->message);
+			g_clear_error (&err);
 		}
 		icon_disabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint-disabled.png", &err);
 		if (!icon_disabled)
 		{
-			fprintf (stderr, "warning: no icon: %s\n", err->message);
-			g_error_free (err);
+			fprintf (stderr, "warning: %s\n", err->message);
+			g_clear_error (&err);
 		}
 	}
 
