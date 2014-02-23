@@ -16,7 +16,7 @@ squint - duplicate a monitor output into a X11 window
 
 = SYNOPSIS =[synopsis]
 
-**squint** [ -dvw ] [ MONITOR_NAME ]
+**squint** [ -dvw ] [ -l N ] [ -r N ] [ MONITOR_NAME ]
 
 = DESCRIPTION =[description]
 
@@ -32,7 +32,9 @@ available to do any other stuff.
 : **-d, --disable**
 do not enable screen duplication at startup
 : **-l N, --limit N**
-limit the refresh rate to N frames per second (default is 50fps). Use '-l' 0 to disable limitation (not recommended).
+limit the refresh rate to N frames per second (default is 50fps), use '-l' 0 to disable limitation (not recommended)
+: **-r N, --rate N**
+Use fixed refresh rate of N frames per second (default to 25fps when the XDamage extension is not available)
 : **-v, --version**
 display version information and exit
 : **-w, --window**

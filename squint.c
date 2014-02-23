@@ -32,7 +32,7 @@ struct {
 	const char* dst_monitor_name;
 
 	gboolean opt_version, opt_window, opt_disable;
-	gint opt_limit;
+	gint opt_limit, opt_rate;
 } config;
 
 // State
@@ -917,6 +917,11 @@ enable_xdamage()
 		return;
 	}
 
+	if (config.opt_rate > 0) {
+		// user requested fixed refresh rate
+		return;
+	}
+
 	int error_base, major, minor;
 	if (	   !XFixesQueryExtension(display, &xfixes_event_base, &error_base)
 		|| !XFixesQueryVersion(display, &major, &minor)
@@ -1382,7 +1387,14 @@ enable()
 	if (!(use_xdamage && track_cursor))
 #endif
 	{
-		refresh_timer = g_timeout_add (40, &refresh_image, NULL);
+		int rate = 25; // default to 25 fps
+		if(config.opt_rate > 0) {
+			rate = config.opt_rate;
+		} else if ((config.opt_limit > 0) && (config.opt_limit < rate)) {
+			rate = config.opt_limit;
+		}
+
+		refresh_timer = g_timeout_add (1000/rate, &refresh_image, NULL);
 	}
 
 	// Redraw the window
@@ -1432,6 +1444,7 @@ disable()
 GOptionEntry option_entries[] = {
   { "disable",	'd',	0,	G_OPTION_ARG_NONE,	&config.opt_disable,	"Do not enable screen duplication at startup", NULL},
   { "limit",	'l',	0,	G_OPTION_ARG_INT,	&config.opt_limit,	"Limit refresh rate to N frames per second", "N"},
+  { "rate",	'r',	0,	G_OPTION_ARG_INT,	&config.opt_rate,	"Use fixed refresh rate of N frames per second", "N"},
   { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
   { "window",	'w',	0,	G_OPTION_ARG_NONE,	&config.opt_window,	"Run inside a window instead of going fullscreen", NULL},
   { NULL }
