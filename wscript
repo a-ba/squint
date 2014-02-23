@@ -19,8 +19,8 @@ def configure (conf):
 	conf.define("VERSION", VERSION);
 
 	conf.define("PREFIX", conf.env.PREFIX)
-	if not	conf.check_cfg(package="gtk+-3.0", args="--cflags --libs", uselib_store="GTK", mandatory = False):
-		conf.check_cfg(package="gtk+-2.0", args="--cflags --libs", uselib_store="GTK")
+
+	conf.check_cfg(package="gtk+-3.0", args="--cflags --libs", uselib_store="GTK")
 	
 	conf.check_cfg(package="xi", args="--cflags --libs", uselib_store="XI",
 			atleast_version="1.5", mandatory=False)
