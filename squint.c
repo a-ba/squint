@@ -126,9 +126,10 @@ show()
 	if (!raised)
 	{
 		raised = 1;
-		gdk_window_raise(gdkwin);
 		if (fullscreen) {
-			gdk_window_fullscreen(gdkwin);
+			gtk_widget_show(gtkwin);
+		} else {
+			gdk_window_raise(gdkwin);
 		}
 	}
 }
@@ -138,9 +139,10 @@ do_hide()
 {
 	raised = 0;
 	if (fullscreen) {
-		gdk_window_unfullscreen(gdkwin);
+		gtk_widget_hide(gtkwin);
+	} else {
+		gdk_window_lower(gdkwin);
 	}
-	gdk_window_lower(gdkwin);
 }
 
 void
@@ -1188,50 +1190,63 @@ enable_window()
 	offset.y = 0;
 	fullscreen = !config.opt_window;
 
-	// create the window
-	gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-	gtk_window_set_resizable(GTK_WINDOW(gtkwin), TRUE);
-	if (icon_enabled) {
-		gtk_window_set_icon (GTK_WINDOW(gtkwin), icon_enabled);
+	if (fullscreen)
+	{
+		// create the window
+		gtkwin = gtk_window_new (GTK_WINDOW_POPUP);
+
+		// resize it to the dimensions of the dst monitor
+		gtk_window_resize(GTK_WINDOW(gtkwin),
+				dst_rect.width, dst_rect.height);
+
+		// move the window into the cover the destination screen
+		gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x, dst_rect.y);
+
+		// create the gdkwindow
+		gtk_widget_realize(gtkwin);
+		gdkwin = gtk_widget_get_window(gtkwin);
+	} else {
+		// create the window
+		gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+		gtk_window_set_resizable(GTK_WINDOW(gtkwin), TRUE);
+		if (icon_enabled) {
+			gtk_window_set_icon (GTK_WINDOW(gtkwin), icon_enabled);
+		}
+
+		// map my window
+		gtk_widget_show (gtkwin);
+		gdkwin = gtk_widget_get_window(gtkwin);
+
+		// hide it
+		gdk_window_lower(gdkwin);
+
+		// resize the window
+		int w = src_rect.width;
+		int max_w = dst_rect.width - 100;
+		int h = src_rect.height;
+		int max_h = dst_rect.height - 100;
+		gtk_window_resize(GTK_WINDOW(gtkwin),
+			((w < max_w) ? w : max_w),
+			((h < max_h) ? h : max_h));
+
+		// move the window into the destination screen
+		gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x+50, dst_rect.y+50);
+
+		// register the events
+		// - window moved/resized
+		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
+
+		// - disable on window closed
+		g_signal_connect (gtkwin, "delete-event", G_CALLBACK (on_window_delete_event), NULL);
+
+		// - resize the window to src monitor size on double click
+		g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
+		gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 	}
 
 	// black background
 	GdkRGBA black = {0,0,0,1};
 	gtk_widget_override_background_color(gtkwin, 0, &black);
-
-	// map my window
-	gtk_widget_show_all (gtkwin);
-
-	gdkwin = gtk_widget_get_window(gtkwin);
-
-	// hide it
-	gdk_window_lower(gdkwin);
-
-	// register the events
-	// - window moved/resized
-	g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
-	// - quit on window closed
-	g_signal_connect (gtkwin, "delete-event", G_CALLBACK (on_window_delete_event), NULL);
-
-	// - resize the window to src monitor size on double click
-	g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
-	gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
-
-
-	// resize the window
-	// 	- 400x300 if fullscreen
-	// 	- src_rect dimensions if not
-	// 	- dst_rect -100 if too big
-	int w = (fullscreen ? 400 : src_rect.width);
-	int max_w = dst_rect.width - 100;
-	int h = (fullscreen ? 300 : src_rect.height);
-	int max_h = dst_rect.height - 100;
-	gtk_window_resize(GTK_WINDOW(gtkwin),
-		((w < max_w) ? w : max_w),
-		((h < max_h) ? h : max_h));
-
-	// move the window into the destination screen
-	gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x+50, dst_rect.y+50);
 
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, src_rect.width, src_rect.height, depth);
