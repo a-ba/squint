@@ -28,6 +28,9 @@ def configure (conf):
 	conf.check_cfg(package="xrandr", args="--cflags --libs", uselib_store="XRANDR",
 			mandatory=False)
 
+	conf.check_cfg(package="libnotify", args="--cflags --libs", uselib_store="LIBNOTIFY",
+			mandatory=False)
+
 	have_xfixes = conf.check_cfg(package="xfixes", args="--cflags --libs",
 			uselib_store="XFIXES", mandatory=False)
 
@@ -51,7 +54,7 @@ def build (bld):
 	bld.program(
 		target="squint",
 		source="squint.c",
-		uselib="GTK XI XFIXES XEXT XDAMAGE XRANDR"
+		uselib="GTK XI XFIXES XEXT XDAMAGE XRANDR LIBNOTIFY"
 	)
 
 	bld.install_as("${PREFIX}/share/squint/squint.png", "squint.png")

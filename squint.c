@@ -17,6 +17,9 @@
 #ifdef HAVE_XRANDR
 #include <X11/extensions/Xrandr.h>
 #endif
+#ifdef HAVE_LIBNOTIFY
+#include <libnotify/notify.h>
+#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -117,6 +120,25 @@ show_about_dialog()
 void
 error (const char* msg)
 {
+#ifdef HAVE_LIBNOTIFY
+	if (notify_is_initted())
+	{
+		NotifyNotification* notif = notify_notification_new(
+			APPNAME " error",
+			msg,
+			NULL
+		);
+		if(icon_enabled) {
+			notify_notification_set_image_from_pixbuf(
+				notif, icon_enabled);
+		}
+
+		gboolean ok = notify_notification_show(notif, NULL);
+		g_object_unref(notif);
+		if(ok)
+			return;
+	}
+#endif
 	fprintf(stderr, "error: %s\n", msg);
 }
 
@@ -978,9 +1000,13 @@ init_xrandr()
 gboolean
 init()
 {
+#ifdef HAVE_LIBNOTIFY
+	notify_init(APPNAME);
+#endif
+
 	GdkDisplay* gdisplay = gdk_display_get_default();
 	if (!gdisplay) {
-		fprintf (stderr, "error: no display available\n");
+		error("No display available");
 		return FALSE;
 	}
 	gscreen = gdk_display_get_default_screen (gdisplay);
@@ -991,13 +1017,13 @@ init()
 		icon_enabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
 		if (!icon_enabled)
 		{
-			fprintf (stderr, "warning: %s\n", err->message);
+			error(err->message);
 			g_clear_error (&err);
 		}
 		icon_disabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint-disabled.png", &err);
 		if (!icon_disabled)
 		{
-			fprintf (stderr, "warning: %s\n", err->message);
+			error(err->message);
 			g_clear_error (&err);
 		}
 	}
@@ -1076,7 +1102,9 @@ select_monitor_by_name(GdkScreen* scr, const char* name,
 {
 	*id = find_monitor(scr, name);
 	if (*id<0) {
-		fprintf(stderr, "monitor %s is not active", name);
+		char buff[128];
+		g_snprintf(buff, 128, "Monitor %s is not active", name);
+		error(buff);
 		return FALSE;
 	}
 	gdk_screen_get_monitor_geometry (scr, *id, rect);
@@ -1117,7 +1145,7 @@ select_monitors()
 
 	n = gdk_screen_get_n_monitors (gscreen);
 	if ((n < 2) && !config.src_monitor_name) {
-		fprintf (stderr, "error: there is only *one* monitor here, what am I supposed to do?\n");
+		error ("There is only one monitor. What am I supposed to do?");
 		return FALSE;
 	}
 
@@ -1132,7 +1160,7 @@ select_monitors()
 	}
 	if ((src_monitor>=0) && (dst_monitor>=0) && !memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
 	{
-		error("source and destination monitors are already cloning each other");
+		error("Source and destination both refer to the same monitor");
 		return FALSE;
 	}
 
@@ -1163,7 +1191,7 @@ select_monitors()
 	}
 
 	if ((src_monitor<0) || (dst_monitor<0)) {
-		error("could not select any monitor to be cloned");
+		error("Could not find any monitor to be cloned");
 		return FALSE;
 	}
 	return TRUE;
@@ -1412,13 +1440,6 @@ main (int argc, char *argv[])
 		default:
 			error("invalid arguments");
 			return 1;
-	}
-
-	if (config.src_monitor_name && config.dst_monitor_name &&
-		strcmp(config.src_monitor_name, config.dst_monitor_name) == 0)
-	{
-		error("SourceMonitor and DestinationMonitor refer to the same monitor");
-		return 1;
 	}
 
 	// initialisation
