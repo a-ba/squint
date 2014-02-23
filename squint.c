@@ -32,6 +32,7 @@ struct {
 	const char* dst_monitor_name;
 
 	gboolean opt_version, opt_window, opt_disable;
+	gint opt_limit;
 } config;
 
 // State
@@ -72,7 +73,7 @@ int window_mapped = 1;
 int xdamage_event_base;
 Damage damage = 0;
 XserverRegion screen_region = 0;
-#define MIN_PERIOD 20
+int min_refresh_period=0;
 Time next_refresh=0;
 gint refresh_timeout=0;
 #endif
@@ -587,7 +588,7 @@ try_refresh_image (Time timestamp)
 			g_source_remove(refresh_timeout);
 			refresh_timeout=0;
 		}
-		next_refresh = timestamp + MIN_PERIOD;
+		next_refresh = timestamp + min_refresh_period;
 		refresh_image(NULL);
 
 	} else if (!refresh_timeout) {
@@ -925,6 +926,14 @@ enable_xdamage()
 		|| (major<1)
 	) {
 		return;
+	}
+
+	if (config.opt_limit == 0) {
+		// no limit
+		min_refresh_period = 0;
+	} else {
+		// 50 fps by default
+		min_refresh_period = 1000 / ((config.opt_limit<0) ? 50 : config.opt_limit); 
 	}
 
 	damage = XDamageCreate(display, root_window, XDamageReportBoundingBox);
@@ -1422,6 +1431,7 @@ disable()
 
 GOptionEntry option_entries[] = {
   { "disable",	'd',	0,	G_OPTION_ARG_NONE,	&config.opt_disable,	"Do not enable screen duplication at startup", NULL},
+  { "limit",	'l',	0,	G_OPTION_ARG_INT,	&config.opt_limit,	"Limit refresh rate to N frames per second", "N"},
   { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
   { "window",	'w',	0,	G_OPTION_ARG_NONE,	&config.opt_window,	"Run inside a window instead of going fullscreen", NULL},
   { NULL }
@@ -1434,6 +1444,7 @@ main (int argc, char *argv[])
 	GOptionContext *context;
 
 	memset(&config, 0, sizeof(config));
+	config.opt_limit = -1;
 
 	context = g_option_context_new (NULL);
 	g_option_context_add_main_entries (context, option_entries, NULL);

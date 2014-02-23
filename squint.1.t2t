@@ -31,6 +31,8 @@ available to do any other stuff.
 = OPTIONS =
 : **-d, --disable**
 do not enable screen duplication at startup
+: **-l N, --limit N**
+limit the refresh rate to N frames per second (default is 50fps). Use '-l' 0 to disable limitation (not recommended).
 : **-v, --version**
 display version information and exit
 : **-w, --window**
