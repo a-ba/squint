@@ -61,6 +61,7 @@ gint refresh_timer = 0;
 GdkRectangle src_rect, dst_rect;
 GdkPoint offset;
 GdkPoint cursor;
+GdkCursor* cursor_icon = NULL;
 
 #ifdef HAVE_XI
 gboolean track_cursor = FALSE;
@@ -1066,6 +1067,7 @@ init()
 			g_clear_error (&err);
 		}
 	}
+	cursor_icon = gdk_cursor_new_for_display(gdisplay, GDK_X_CURSOR);
 
 	display = gdk_x11_get_default_xdisplay();
 
@@ -1298,6 +1300,9 @@ enable_window()
 
 		// move the window into the destination screen
 		gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x+50, dst_rect.y+50);
+
+		// override the cursor icon
+		gdk_window_set_cursor(gdkwin, cursor_icon);
 
 		// register the events
 		// - window moved/resized
