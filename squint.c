@@ -774,6 +774,24 @@ disable_copy_cursor()
 #endif
 
 void
+show_active_window()
+{
+	// check if it overlaps more whith the src or the dst window
+	GdkRectangle inter_src, inter_dst;
+	gdk_rectangle_intersect(&active_window_rect, &src_rect, &inter_src);
+	gdk_rectangle_intersect(&active_window_rect, &dst_rect, &inter_dst);
+
+	if((inter_src.height*inter_src.width) > (inter_dst.height*inter_dst.width))
+	{
+		// the active window overlaps more with the source screen
+		show();
+	} else {
+		// the active window overlaps more with the destination screen
+		hide();
+	}
+}
+
+void
 on_x11_active_window_changed(Window w)
 {
 	// ignore X11 errors (this function can produce BadWindow errors since
@@ -808,19 +826,7 @@ on_x11_active_window_changed(Window w)
 	}
 	gdk_x11_display_error_trap_pop_ignored(gdisplay);
 
-	// check if it overlaps more whith the src or the dst window
-	GdkRectangle inter_src, inter_dst;
-	gdk_rectangle_intersect(&active_window_rect, &src_rect, &inter_src);
-	gdk_rectangle_intersect(&active_window_rect, &dst_rect, &inter_dst);
-
-	if((inter_src.height*inter_src.width) > (inter_dst.height*inter_dst.width))
-	{
-		// the active window overlaps more with the source screen
-		show();
-	} else {
-		// the active window overlaps more with the destination screen
-		hide();
-	}
+	show_active_window();
 	return;
 err:	
 	gdk_x11_display_error_trap_pop_ignored(gdisplay);
@@ -862,12 +868,25 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 	if(track_cursor)
 	{
 		if (	(cookie->type == GenericEvent)
-		    &&	(cookie->extension == xi_opcode)
-		    &&	(cookie->evtype == XI_RawMotion))
+		    &&	(cookie->extension == xi_opcode))
 		{
-			// cursor was moved
-			refresh_cursor_location(FALSE);
-			return GDK_FILTER_REMOVE;
+			switch (cookie->evtype)
+			{
+			case XI_RawMotion:
+				// cursor was moved
+				refresh_cursor_location(FALSE);
+				return GDK_FILTER_REMOVE;
+			case XI_RawKeyPress:
+				// a key was pressed
+				// -> we ensure that the active window is on screen
+				//
+				// FIXME: this works as long as the user does not move the
+				// window into the other monitor without using the pointer
+				// (we would have to track the movements of the active
+				//  to handle this case properly)
+				show_active_window();
+				return GDK_FILTER_REMOVE;
+			}
 		}
 	}
 #endif
@@ -932,6 +951,7 @@ set_xi_eventmask(gboolean active)
 	if (active) {
 		// select for button and key events from all master devices
 		XISetMask(mask1, XI_RawMotion);
+		XISetMask(mask1, XI_RawKeyPress);
 	}
 
 	evmasks[0].deviceid = XIAllMasterDevices;
