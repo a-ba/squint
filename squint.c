@@ -51,14 +51,16 @@ Pixmap pixmap = -1;
 int depth = -1, screen = -1;
 GC gc = NULL;
 GC gc_white = NULL;
+GdkDisplay* gdisplay = NULL;
 Display* display = NULL;
 GdkScreen* gscreen = NULL;
 int raised = 0;
 GdkPixbuf* icon_enabled  = NULL;
 GdkPixbuf* icon_disabled = NULL;
 gint refresh_timer = 0;
+Atom net_active_window_atom = 0;
 
-GdkRectangle src_rect, dst_rect;
+GdkRectangle src_rect, dst_rect, active_window_rect;
 GdkPoint offset;
 GdkPoint cursor;
 GdkCursor* cursor_icon = NULL;
@@ -771,11 +773,90 @@ disable_copy_cursor()
 }
 #endif
 
+void
+on_x11_active_window_changed(Window w)
+{
+	// ignore X11 errors (this function can produce BadWindow errors since
+	// it makes queries on windows controlled by other applications)
+	gdk_x11_display_error_trap_push(gdisplay);
+
+	{
+		Window root, parent, *children;
+		unsigned int nchildren;
+		int x, y;
+		unsigned int width, height, border_width, depth;
+
+		// identify the top-level window
+		parent = w;
+		while(parent != root_window)
+		{
+			w = parent;
+			if(!XQueryTree(display, w, &root, &parent, &children, &nchildren))
+				goto err;
+			XFree(children);
+		}
+		
+		// get its coordinates
+		if (!XGetGeometry(display, w, &root, &x, &y, &width, &height,
+				&border_width, &depth))
+			goto err;
+
+		active_window_rect.x = x - border_width;
+		active_window_rect.y = y - border_width;
+		active_window_rect.width  = width  + 2*border_width;
+		active_window_rect.height = height + 2*border_width;
+	}
+	gdk_x11_display_error_trap_pop_ignored(gdisplay);
+
+	// check if it overlaps more whith the src or the dst window
+	GdkRectangle inter_src, inter_dst;
+	gdk_rectangle_intersect(&active_window_rect, &src_rect, &inter_src);
+	gdk_rectangle_intersect(&active_window_rect, &dst_rect, &inter_dst);
+
+	if((inter_src.height*inter_src.width) > (inter_dst.height*inter_dst.width))
+	{
+		// the active window overlaps more with the source screen
+		show();
+	} else {
+		// the active window overlaps more with the destination screen
+		hide();
+	}
+	return;
+err:	
+	gdk_x11_display_error_trap_pop_ignored(gdisplay);
+}
+
 GdkFilterReturn
 on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 {
 	XEvent* ev = (XEvent*)xevent;
 	XGenericEventCookie *cookie = &ev->xcookie;
+
+
+	if (ev->type == PropertyNotify)
+	{
+		XPropertyEvent* pn_ev = (XPropertyEvent*) ev;
+		if ((pn_ev->window == root_window) && (pn_ev->atom == net_active_window_atom))
+		{
+			// property _NET_ACTIVE_WINDOW was changed
+			Window* w;
+			Atom actual_type_return;
+			int  actual_format_return;
+			unsigned long nitems_return, bytes_after_return;
+
+			if (XGetWindowProperty(display, root_window, net_active_window_atom, 0, 1,
+					FALSE, AnyPropertyType,	&actual_type_return,
+					&actual_format_return, &nitems_return,
+					&bytes_after_return, (unsigned char**)&w)
+				== Success)
+			{
+				on_x11_active_window_changed(*w);
+				XFree(w);
+			}
+			return GDK_FILTER_REMOVE;
+		}
+		
+	}
 
 #ifdef HAVE_XI
 	if(track_cursor)
@@ -1044,7 +1125,7 @@ init()
 	notify_init(APPNAME);
 #endif
 
-	GdkDisplay* gdisplay = gdk_display_get_default();
+	gdisplay = gdk_display_get_default();
 	if (!gdisplay) {
 		error("No display available");
 		return FALSE;
@@ -1114,6 +1195,10 @@ init()
 #ifdef HAVE_XRANDR
 	init_xrandr();
 #endif
+
+	// atom name
+	net_active_window_atom = XInternAtom(display, "_NET_ACTIVE_WINDOW", FALSE);
+
 	return TRUE;
 }
 
@@ -1357,6 +1442,24 @@ disable_window()
 	gtkwin = NULL;
 }
 
+void
+enable_focus_tracking()
+{
+	memset(&active_window_rect, 0, sizeof(active_window_rect));
+
+	XSetWindowAttributes attr;
+	attr.event_mask = PropertyChangeMask;
+	XChangeWindowAttributes(display, root_window, CWEventMask, &attr);
+}
+
+void
+disable_focus_tracking()
+{
+	XSetWindowAttributes attr;
+	attr.event_mask = 0;
+	XChangeWindowAttributes(display, root_window, CWEventMask, &attr);
+}
+
 gboolean
 enable()
 {
@@ -1370,6 +1473,7 @@ enable()
 
 	enable_window();
 
+	enable_focus_tracking();
 	
 #ifdef HAVE_XI
 	enable_cursor_tracking();
@@ -1437,6 +1541,7 @@ disable()
 #ifdef USE_XDAMAGE
 	disable_xdamage();
 #endif
+	disable_focus_tracking();
 
 	disable_window();
 
