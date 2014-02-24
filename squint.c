@@ -884,8 +884,34 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 				// window into the other monitor without using the pointer
 				// (we would have to track the movements of the active
 				//  to handle this case properly)
-				show_active_window();
-				return GDK_FILTER_REMOVE;
+				{
+					XIRawEvent* xi_ev = (XIRawEvent*) cookie->data;
+					GdkKeymap* km = gdk_keymap_get_for_display(gdisplay);
+					guint keyval, nentries;
+
+					if(gdk_keymap_translate_keyboard_state(km, xi_ev->detail,
+							0, // FIXME: do we need the modifier?
+							0, // FIXME: how to determine the group?
+							&keyval, NULL, NULL, NULL))
+					{
+						switch(keyval)
+						{
+						case  GDK_KEY_Control_L:
+						case  GDK_KEY_Control_R:
+						case  GDK_KEY_Meta_L:
+						case  GDK_KEY_Meta_R:
+						case  GDK_KEY_Alt_L:
+						case  GDK_KEY_Alt_R:
+							// ignore modifier keys (except shift)
+							// because they may be used by the
+							// window manager
+							return GDK_FILTER_REMOVE;
+						}
+					}
+				
+					show_active_window();
+					return GDK_FILTER_REMOVE;
+				}
 			}
 		}
 	}
