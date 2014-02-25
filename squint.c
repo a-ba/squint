@@ -590,7 +590,7 @@ try_refresh_image (Time timestamp)
 		refresh_image(NULL);
 
 	} else if (!refresh_timeout) {
-		refresh_timeout = g_timeout_add (next_refresh - timestamp, _try_refresh_image_timeout, NULL);
+		refresh_timeout = g_timeout_add (next_refresh - timestamp, _try_refresh_image_timeout, (gpointer)next_refresh);
 	}
 }
 #endif
