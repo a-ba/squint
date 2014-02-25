@@ -1427,9 +1427,6 @@ enable_window()
 		// move the window into the destination screen
 		gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x+50, dst_rect.y+50);
 
-		// override the cursor icon
-		gdk_window_set_cursor(gdkwin, cursor_icon);
-
 		// register the events
 		// - window moved/resized
 		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
@@ -1441,6 +1438,9 @@ enable_window()
 		g_signal_connect (gtkwin, "button-press-event", G_CALLBACK (on_window_button_press_event), NULL);
 		gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 	}
+
+	// override the cursor icon
+	gdk_window_set_cursor(gdkwin, cursor_icon);
 
 	// black background
 	GdkRGBA black = {0,0,0,1};
