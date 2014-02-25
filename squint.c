@@ -489,11 +489,6 @@ refresh_cursor_location(gboolean force)
 		entered_screen = (c.x >=0);
 		left_screen = !entered_screen;
 	} else {
-		if (memcmp(&cursor, &c, sizeof(cursor)) == 0) {
-			// nothing to do
-			return;
-		}
-
 		entered_screen = (cursor.x<0) && (c.x>=0);
 		left_screen    = (cursor.x>=0) && (c.x<0);
 	}
