@@ -60,6 +60,7 @@ GdkPixbuf* icon_disabled = NULL;
 gint refresh_timer = 0;
 Atom net_active_window_atom = 0;
 
+Window active_window = 0;
 GdkRectangle src_rect, dst_rect, active_window_rect;
 GdkPoint offset;
 GdkPoint cursor;
@@ -771,6 +772,9 @@ disable_copy_cursor()
 void
 show_active_window()
 {
+	if (!active_window)
+		return;
+
 	// check if it overlaps more whith the src or the dst window
 	GdkRectangle inter_src, inter_dst;
 	gdk_rectangle_intersect(&active_window_rect, &src_rect, &inter_src);
@@ -787,13 +791,17 @@ show_active_window()
 }
 
 void
-on_x11_active_window_changed(Window w)
+refresh_active_window_geometry()
 {
+	if(!active_window)
+		return;
+
 	// ignore X11 errors (this function can produce BadWindow errors since
 	// it makes queries on windows controlled by other applications)
 	gdk_x11_display_error_trap_push(gdisplay);
 
 	{
+		Window w = active_window;
 		Window root, parent, *children;
 		unsigned int nchildren;
 		int x, y;
@@ -819,12 +827,76 @@ on_x11_active_window_changed(Window w)
 		active_window_rect.width  = width  + 2*border_width;
 		active_window_rect.height = height + 2*border_width;
 	}
-	gdk_x11_display_error_trap_pop_ignored(gdisplay);
-
-	show_active_window();
-	return;
 err:	
 	gdk_x11_display_error_trap_pop_ignored(gdisplay);
+}
+
+Window
+get_active_window()
+{
+	Window result = 0;
+	Window* w;
+	Atom actual_type_return;
+	int  actual_format_return;
+	unsigned long nitems_return, bytes_after_return;
+
+	if (XGetWindowProperty(display, root_window, net_active_window_atom, 0, 1,
+			FALSE, AnyPropertyType,	&actual_type_return,
+			&actual_format_return, &nitems_return,
+			&bytes_after_return, (unsigned char**)&w)
+		== Success)
+	{
+		result = *w;
+		XFree(w);
+	}
+	return result;
+}
+
+void
+active_window_stop_monitoring()
+{
+	if (!gdk_x11_window_lookup_for_display(gdisplay, active_window))
+	{
+		// ignore X11 errors (this function can produce BadWindow errors since
+		// it makes queries on windows controlled by other applications)
+		gdk_x11_display_error_trap_push(gdisplay);
+
+		XSetWindowAttributes attr;
+		attr.event_mask = 0;
+		XChangeWindowAttributes(display, active_window, CWEventMask, &attr);
+
+		gdk_x11_display_error_trap_pop_ignored(gdisplay);
+	} 
+	active_window = 0;
+}
+
+void
+active_window_start_monitoring()
+{
+	if (active_window)
+		active_window_stop_monitoring();
+
+	active_window = get_active_window();
+	if (!active_window)
+		return;
+
+	if (!gdk_x11_window_lookup_for_display(gdisplay, active_window))
+	{
+		// this is a foreign window
+		// -> we need to monitor it explicitely
+		
+		 
+		// ignore X11 errors (this function can produce BadWindow errors since
+		// it makes queries on windows controlled by other applications)
+		gdk_x11_display_error_trap_push(gdisplay);
+
+		XSetWindowAttributes attr;
+		attr.event_mask = StructureNotifyMask;
+		XChangeWindowAttributes(display, active_window, CWEventMask, &attr);
+
+		gdk_x11_display_error_trap_pop_ignored(gdisplay);
+	}
+	refresh_active_window_geometry();
 }
 
 GdkFilterReturn
@@ -840,23 +912,21 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		if ((pn_ev->window == root_window) && (pn_ev->atom == net_active_window_atom))
 		{
 			// property _NET_ACTIVE_WINDOW was changed
-			Window* w;
-			Atom actual_type_return;
-			int  actual_format_return;
-			unsigned long nitems_return, bytes_after_return;
-
-			if (XGetWindowProperty(display, root_window, net_active_window_atom, 0, 1,
-					FALSE, AnyPropertyType,	&actual_type_return,
-					&actual_format_return, &nitems_return,
-					&bytes_after_return, (unsigned char**)&w)
-				== Success)
-			{
-				on_x11_active_window_changed(*w);
-				XFree(w);
-			}
+			active_window_start_monitoring();
+			show_active_window();
 			return GDK_FILTER_REMOVE;
 		}
 		
+	}
+
+	if (ev->type == ConfigureNotify)
+	{
+		XConfigureEvent* c_ev = (XConfigureEvent*) ev;
+		if (c_ev->window == active_window)
+		{
+			refresh_active_window_geometry();
+			return GDK_FILTER_CONTINUE;
+		}
 	}
 
 #ifdef HAVE_XI
@@ -874,11 +944,6 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 			case XI_RawKeyPress:
 				// a key was pressed
 				// -> we ensure that the active window is on screen
-				//
-				// FIXME: this works as long as the user does not move the
-				// window into the other monitor without using the pointer
-				// (we would have to track the movements of the active
-				//  to handle this case properly)
 				{
 					XIRawEvent* xi_ev = (XIRawEvent*) cookie->data;
 					GdkKeymap* km = gdk_keymap_get_for_display(gdisplay);
@@ -1530,6 +1595,8 @@ enable()
 
 	XFlush (display);
 
+	active_window_start_monitoring();
+
 	// catch all X11 events
 	gdk_window_add_filter(NULL, on_x11_event, NULL);
 
@@ -1570,6 +1637,8 @@ disable()
 	}
 
 	gdk_window_remove_filter(NULL, on_x11_event, NULL);
+
+	active_window_stop_monitoring();
 
 #ifdef HAVE_XI
 	disable_cursor_tracking();
