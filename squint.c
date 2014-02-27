@@ -1630,7 +1630,7 @@ enable()
 	// catch all X11 events
 	gdk_window_add_filter(NULL, on_x11_event, NULL);
 
-#if USE_XDAMAGE && COPY_CURSOR
+#if USE_XDAMAGE && HAVE_XI
 	if (!(use_xdamage && track_cursor))
 #endif
 	{
