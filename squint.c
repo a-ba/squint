@@ -46,6 +46,7 @@ GdkWindow* gdkwin = NULL;
 GtkStatusIcon* status_icon = NULL;
 GtkWidget* menu = NULL;
 Window root_window = 0;
+GdkRectangle root_window_rect;
 Window window = 0;
 Pixmap pixmap = -1;
 int depth = -1, screen = -1;
@@ -790,6 +791,33 @@ show_active_window()
 	}
 }
 
+gboolean
+get_window_geometry(Window w, GdkRectangle* r)
+{
+	gboolean result;
+	Window root;
+	int x, y;
+	unsigned int width, height, border_width, depth;
+
+	gdk_x11_display_error_trap_push(gdisplay);
+
+	if (XGetGeometry(display, w, &root, &x, &y, &width, &height,
+			&border_width, &depth))
+	{
+		r->x = x - border_width;
+		r->y = y - border_width;
+		r->width  = width  + 2*border_width;
+		r->height = height + 2*border_width;
+
+		result = TRUE;
+	} else {
+		result = FALSE;
+	}
+	gdk_x11_display_error_trap_pop_ignored(gdisplay);
+
+	return result;
+}
+
 void
 refresh_active_window_geometry()
 {
@@ -818,14 +846,7 @@ refresh_active_window_geometry()
 		}
 		
 		// get its coordinates
-		if (!XGetGeometry(display, w, &root, &x, &y, &width, &height,
-				&border_width, &depth))
-			goto err;
-
-		active_window_rect.x = x - border_width;
-		active_window_rect.y = y - border_width;
-		active_window_rect.width  = width  + 2*border_width;
-		active_window_rect.height = height + 2*border_width;
+		get_window_geometry(w, &active_window_rect);
 	}
 err:	
 	gdk_x11_display_error_trap_pop_ignored(gdisplay);
@@ -880,6 +901,15 @@ active_window_start_monitoring()
 	if (!active_window)
 		return;
 
+	refresh_active_window_geometry();
+	if (!memcmp(&active_window_rect, &root_window_rect, sizeof(GdkRectangle))) {
+		// same geometry as the root window
+		// -> ignore it
+		// TODO: make the match more loose
+		active_window = 0;
+		return;
+	}
+
 	if (!gdk_x11_window_lookup_for_display(gdisplay, active_window))
 	{
 		// this is a foreign window
@@ -896,7 +926,6 @@ active_window_start_monitoring()
 
 		gdk_x11_display_error_trap_pop_ignored(gdisplay);
 	}
-	refresh_active_window_geometry();
 }
 
 GdkFilterReturn
@@ -1595,6 +1624,7 @@ enable()
 
 	XFlush (display);
 
+	get_window_geometry(root_window, &root_window_rect);
 	active_window_start_monitoring();
 
 	// catch all X11 events
