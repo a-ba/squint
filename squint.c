@@ -969,6 +969,14 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 			case XI_RawMotion:
 				// cursor was moved
 				refresh_cursor_location(FALSE);
+#ifdef USE_XDAMAGE
+#ifdef COPY_CURSOR
+				if(!copy_cursor)
+#endif
+				if(use_xdamage) {
+					refresh_image(NULL);
+				}
+#endif
 				return GDK_FILTER_REMOVE;
 			case XI_RawKeyPress:
 				// a key was pressed
