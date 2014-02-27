@@ -1,0 +1,30 @@
+Version 0.7	27/02/2014
+
+Improvements
+	- the periodic timer was removed (thanks XDamage & XInput), this brings
+	  smoother motions, better performances and less power consumption
+	- the cursor icon from the source screen is now cloned into the
+	  destination screen (instead of drawing a crosshair)
+	- the window (in fullscreen mode) is now completely hidden
+	- the window (in window mode) is now resizable
+	- errors are reported on screen using freedesktop notifications
+	- the location of the active_window is tracked to ensure that it is in
+	  on screen when there is activity on the keyboard
+	- duplication is stopped when there is a change in the XRandr configuration
+
+New features
+	- an icon in the system tray allows controlling the app at runtime:
+		- enable/disable duplication
+		- choose a different source/destination screen
+		- toggle fullscreen mode
+		- quit
+	- screen duplication can be disabled ad startup by using -d (useful
+	  for launcing squint at the X session startup)
+	- it is possible to clone a source screen with a resolution which is
+	  larger than the destination screen (the window will slide)
+	- the refresh rate can be tuned/limited in the command line
+
+Other changes
+	- by default squint uses the primary monitor (as reported by gdk) as the
+	  destination screen (instead of choosing the largest screen)
+	- dropped Gtk2 compatibility

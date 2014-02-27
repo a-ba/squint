@@ -7,7 +7,7 @@ top = '.'
 out = '__build__'
 
 APPNAME = "squint"
-VERSION = "0.6"
+VERSION = "0.7"
 
 def options (ctx):
 	ctx.load ("compiler_c")

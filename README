@@ -11,9 +11,9 @@ INTRODUCTION
 
 DEPENDENCIES
 	
-	Mandatory:
+	Required:
 		- gtk+ (>=3.0)
-		- python2 (>= 2.6)
+		- python2 (>= 2.4)
 
 	Optional (but recommended):
 		- libxdamage
