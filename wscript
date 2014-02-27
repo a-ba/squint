@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 # encoding: utf-8
 
-from waflib import Utils
+from waflib import Logs
 
 top = '.'
 out = '__build__'
@@ -48,6 +48,12 @@ def configure (conf):
 
 	conf.find_program("txt2tags", mandatory=False)
 	conf.find_program("gzip", mandatory=False)
+
+	if any(((x not in conf.env.define_key) for x in 
+		('HAVE_XI', 'HAVE_XRANDR', 'HAVE_LIBNOTIFY',
+		 'HAVE_XFIXES', 'HAVE_XDAMAGE', 'HAVE_XEXT',
+		))):
+			Logs.pprint("YELLOW", "NOTE: one or more libraries were not found on your system, squint will work in degraded mode");
 
 def build (bld):
 
