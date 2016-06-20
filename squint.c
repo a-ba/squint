@@ -107,7 +107,9 @@ uint8_t*  cursor_mask_pixels;
 int xrandr_event_base = 0;
 #endif
 
+gboolean enable();
 void disable();
+gboolean on_status_icon_activated(GtkWidget* widget, gpointer data);
 
 void
 show_about_dialog()

@@ -21,6 +21,7 @@ def configure (conf):
 	conf.define("PREFIX", conf.env.PREFIX)
 
 	conf.check_cfg(package="gtk+-3.0", args="--cflags --libs", uselib_store="GTK")
+	conf.check_cfg(package="x11",      args="--cflags --libs", uselib_store="GTK")
 	
 	conf.check_cfg(package="xi", args="--cflags --libs", uselib_store="XI",
 			atleast_version="1.5", mandatory=False)
