@@ -1,3 +1,9 @@
+Version 0.7.1	20/06/2016
+
+Bugfixes:
+	- fixes for building with gcc 5.4
+
+
 Version 0.7	27/02/2014
 
 Improvements
