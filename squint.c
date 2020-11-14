@@ -1384,6 +1384,34 @@ select_monitor_by_name(GdkScreen* scr, const char* name,
 }
 
 gboolean
+select_rightmost_monitor_but(GdkScreen* scr, int* id, GdkRectangle* rect, const GdkRectangle* other_rect)
+{
+	int n = gdk_screen_get_n_monitors (scr);
+	int i;
+	int found_id = -1;
+	GdkRectangle found_rect;
+	for (i=0 ; i<n ; i++)
+	{
+		GdkRectangle candidate_rect;
+		gdk_screen_get_monitor_geometry (scr, i, &candidate_rect);
+		if (!other_rect || memcmp(&candidate_rect, other_rect, sizeof(GdkRectangle)))
+		{
+			if ((found_id < 0) || (candidate_rect.x+candidate_rect.width > found_rect.x+found_rect.width))  {
+				memcpy(&found_rect, &candidate_rect, sizeof(GdkRectangle));
+				found_id = i;
+			}
+		}
+	}
+	if (found_id < 0) {
+		return FALSE;
+	} else {
+		memcpy(rect, &found_rect, sizeof(GdkRectangle));
+		*id = found_id;
+		return TRUE;
+	}
+}
+
+gboolean
 select_any_monitor_but(GdkScreen* scr, int* id, GdkRectangle* rect, const GdkRectangle* other_rect)
 {
 	int n = gdk_screen_get_n_monitors (scr);
@@ -1435,27 +1463,12 @@ select_monitors()
 		return FALSE;
 	}
 
-	// if the destination monitor is not yet decided, try to allocate one
-	// according to the panel name
-	if (dst_monitor<0) {
-		int id = gdk_screen_get_primary_monitor(gscreen);
-
-		gdk_screen_get_monitor_geometry (gscreen, id, &dst_rect);
-
-		// ensure it is not the same as the dst monitor
-		if ((src_monitor < 0) ||
-			memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
-		{
-			// use it !
-			dst_monitor = id;
-		}
-	}
-
-	// if still unsuccessful, then just select any monitor
+	// if the source monitor is not yet decided, then use the rightmost monitor
 	if (src_monitor<0) {
-		select_any_monitor_but(gscreen, &src_monitor, &src_rect,
-			((dst_monitor>=0)?&dst_rect:NULL));
+		select_rightmost_monitor_but(gscreen, &src_monitor, &src_rect, ((dst_monitor>=0)?&dst_rect:NULL));
 	}
+
+	// if the destination_monitor is not yet decided, then use the first unused monitor
 	if (dst_monitor<0) {
 		select_any_monitor_but(gscreen, &dst_monitor, &dst_rect,
 			((src_monitor>=0)?&src_rect:NULL));
