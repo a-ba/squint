@@ -38,7 +38,8 @@ struct {
 // State
 gboolean enabled = FALSE;
 gboolean fullscreen = FALSE;
-int src_monitor, dst_monitor;
+GdkMonitor* src_monitor = NULL;
+GdkMonitor* dst_monitor = NULL;
 
 
 GtkWidget* gtkwin = NULL;
@@ -54,7 +55,6 @@ GC gc = NULL;
 GC gc_white = NULL;
 GdkDisplay* gdisplay = NULL;
 Display* display = NULL;
-GdkScreen* gscreen = NULL;
 int raised = 0;
 GdkPixbuf* icon_enabled  = NULL;
 GdkPixbuf* icon_disabled = NULL;
@@ -288,7 +288,8 @@ update_monitor_config(const char** monitor_name, int id)
 
 	if (id != ITEM_AUTO)
 	{
-		*monitor_name = gdk_screen_get_monitor_plug_name(gscreen, id);
+		GdkMonitor* monitor = gdk_display_get_monitor(gdisplay, id);
+		*monitor_name = g_strdup(gdk_monitor_get_model(monitor));
 	}
 }
 
@@ -341,7 +342,7 @@ on_status_icon_activated(GtkWidget* widget, gpointer data)
 	return FALSE;
 }
 
-void populate_menu_with_monitor_config(GtkWidget* menu, const char* description, const char** config_name, int active_id, intptr_t userdata)
+void populate_menu_with_monitor_config(GtkWidget* menu, const char* description, const char** config_name, GdkMonitor* active_monitor, intptr_t userdata)
 {
 	GtkWidget* item;
 
@@ -359,20 +360,21 @@ void populate_menu_with_monitor_config(GtkWidget* menu, const char* description,
 			(gpointer) (userdata | ITEM_AUTO));
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), auto_item);
 
-	int i, n = gdk_screen_get_n_monitors (gscreen);
+	int i, n = gdk_display_get_n_monitors(gdisplay);
 	int current = -1;
 	char buff[64];
 	for (i=0 ; i<n ; i++)
 	{
-		char* name = gdk_screen_get_monitor_plug_name(gscreen, i);
-		if (enabled && !*config_name && (i==active_id)) {
+		GdkMonitor* monitor = gdk_display_get_monitor(gdisplay, i);
+		const char* name = gdk_monitor_get_model(monitor);
+		if (enabled && !*config_name && (monitor==active_monitor)) {
 			current = i;
 			g_snprintf(buff, 64, "Auto (%s)", name);
 			gtk_menu_item_set_label(GTK_MENU_ITEM(auto_item), buff);
 		}
 
 		GdkRectangle r;
-		gdk_screen_get_monitor_geometry (gscreen, i, &r);
+		gdk_monitor_get_geometry(monitor, &r);
 
 		g_snprintf(buff, 64, "%s %d×%d", name , r.width, r.height);
 
@@ -386,8 +388,6 @@ void populate_menu_with_monitor_config(GtkWidget* menu, const char* description,
 		g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
 				(gpointer) (userdata | (i&0xff)));
 		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-
-		g_free(name);
 	}
 	if ((current<0) && *config_name) {
 		// choosen monitor is not active
@@ -1275,7 +1275,6 @@ init()
 		error("No display available");
 		return FALSE;
 	}
-	gscreen = gdk_display_get_default_screen (gdisplay);
 
 	// load the icons
 	{
@@ -1347,86 +1346,95 @@ init()
 	return TRUE;
 }
 
-// find a monitor by name
-// (return -1 if not found)
-gint
-find_monitor(GdkScreen* scr, const char* name)
+
+gboolean select_monitor(GdkMonitor** mon, GdkRectangle* rect, GdkMonitor* candidate)
 {
-	int n = gdk_screen_get_n_monitors (scr);
-	int i;
-	for (i=0 ; i<n ; i++)
-	{
-		char* n = gdk_screen_get_monitor_plug_name(scr, i);
-		gboolean found = !strcmp(name, n);
-		g_free(n);
+	g_assert_null(*mon);
 
-		if (found) {
-			return i;
-		}
-	}
-	return -1;
-}
-
-gboolean
-select_monitor_by_name(GdkScreen* scr, const char* name,
-		int* id, GdkRectangle* rect)
-{
-	*id = find_monitor(scr, name);
-	if (*id<0) {
-		char buff[128];
-		g_snprintf(buff, 128, "Monitor %s is not active", name);
-		error(buff);
-		return FALSE;
-	}
-	gdk_screen_get_monitor_geometry (scr, *id, rect);
-
-	return TRUE;
-}
-
-gboolean
-select_rightmost_monitor_but(GdkScreen* scr, int* id, GdkRectangle* rect, const GdkRectangle* other_rect)
-{
-	int n = gdk_screen_get_n_monitors (scr);
-	int i;
-	int found_id = -1;
-	GdkRectangle found_rect;
-	for (i=0 ; i<n ; i++)
-	{
-		GdkRectangle candidate_rect;
-		gdk_screen_get_monitor_geometry (scr, i, &candidate_rect);
-		if (!other_rect || memcmp(&candidate_rect, other_rect, sizeof(GdkRectangle)))
-		{
-			if ((found_id < 0) || (candidate_rect.x+candidate_rect.width > found_rect.x+found_rect.width))  {
-				memcpy(&found_rect, &candidate_rect, sizeof(GdkRectangle));
-				found_id = i;
-			}
-		}
-	}
-	if (found_id < 0) {
+	if (candidate == NULL) {
 		return FALSE;
 	} else {
-		memcpy(rect, &found_rect, sizeof(GdkRectangle));
-		*id = found_id;
+		gdk_monitor_get_geometry(candidate, rect);
+		*mon = candidate;
+		g_object_ref(*mon);
 		return TRUE;
 	}
 }
 
-gboolean
-select_any_monitor_but(GdkScreen* scr, int* id, GdkRectangle* rect, const GdkRectangle* other_rect)
+void unselect_monitor(GdkMonitor** mon, GdkRectangle* rect)
 {
-	int n = gdk_screen_get_n_monitors (scr);
+	if (*mon != NULL) {
+		g_object_unref(*mon);
+		*mon = NULL;
+	}
+	memset(rect, 0, sizeof(GdkRectangle));
+}
+
+gboolean
+select_monitor_by_name(GdkDisplay* dsp, const char* name,
+		GdkMonitor** mon, GdkRectangle* rect)
+{
+	int n = gdk_display_get_n_monitors(dsp);
 	int i;
 	for (i=0 ; i<n ; i++)
 	{
-		gdk_screen_get_monitor_geometry (scr, i, rect);
-		if (!other_rect || memcmp(rect, other_rect, sizeof(GdkRectangle)))
+		GdkMonitor* candidate_mon = gdk_display_get_monitor(dsp, i);
+
+		if (strcmp(name, gdk_monitor_get_model(candidate_mon)) == 0) {
+			return select_monitor(mon, rect, candidate_mon);
+		}
+	}
+
+	char buff[128];
+	g_snprintf(buff, 128, "Monitor %s is not active", name);
+	error(buff);
+	return FALSE;
+}
+
+gboolean
+select_rightmost_monitor_but(GdkDisplay* dsp, GdkMonitor** mon, GdkRectangle* rect,
+		const GdkRectangle* other_rect)
+{
+	int n = gdk_display_get_n_monitors(dsp);
+	int i;
+	GdkMonitor* found_monitor = NULL;
+	GdkRectangle found_rect;
+	for (i=0 ; i<n ; i++)
+	{
+		GdkRectangle candidate_rect;
+		GdkMonitor* candidate_mon = gdk_display_get_monitor(dsp, i);
+		gdk_monitor_get_geometry(candidate_mon, &candidate_rect);
+		if (!other_rect || memcmp(&candidate_rect, other_rect, sizeof(GdkRectangle)))
 		{
-			*id = i;
-			return TRUE;
+			if ((found_monitor == NULL) ||
+			    (candidate_rect.x+candidate_rect.width > found_rect.x+found_rect.width))
+			{
+				memcpy(&found_rect, &candidate_rect, sizeof(GdkRectangle));
+				found_monitor = candidate_mon;
+			}
+		}
+	}
+	return select_monitor(mon, rect, found_monitor);
+}
+
+gboolean
+select_any_monitor_but(GdkDisplay* dsp, GdkMonitor** mon, GdkRectangle* rect, const GdkRectangle* other_rect)
+{
+	int n = gdk_display_get_n_monitors(dsp);
+	int i;
+	for (i=0 ; i<n ; i++)
+	{
+		GdkMonitor*  candidate_mon = gdk_display_get_monitor(dsp, i);
+		GdkRectangle candidate_rect;
+		gdk_monitor_get_geometry(candidate_mon, &candidate_rect);
+		if (!other_rect || memcmp(&candidate_rect, other_rect, sizeof(GdkRectangle)))
+		{
+			return select_monitor(mon, rect, candidate_mon);
 		}
 	}
 	return FALSE;
 }
+
 
 //
 // select which monitor is going to be duplicated
@@ -1440,9 +1448,10 @@ gboolean
 select_monitors()
 {
 	int n, i;
-	src_monitor = dst_monitor = -1;
+	unselect_monitor(&src_monitor, &src_rect);
+	unselect_monitor(&dst_monitor, &dst_rect);
 
-	n = gdk_screen_get_n_monitors (gscreen);
+	n = gdk_display_get_n_monitors (gdisplay);
 	if ((n < 2) && !config.src_monitor_name) {
 		error ("There is only one monitor. What am I supposed to do?");
 		return FALSE;
@@ -1450,35 +1459,40 @@ select_monitors()
 
 	// first we try to allocate the requested monitors
 	if (config.src_monitor_name
-		&& !select_monitor_by_name(gscreen, config.src_monitor_name, &src_monitor, &src_rect)) {
+		&& !select_monitor_by_name(gdisplay, config.src_monitor_name, &src_monitor, &src_rect)) {
 			return FALSE;
 	}
 	if (config.dst_monitor_name
-		&& !select_monitor_by_name(gscreen, config.dst_monitor_name, &dst_monitor, &dst_rect)) {
+		&& !select_monitor_by_name(gdisplay, config.dst_monitor_name, &dst_monitor, &dst_rect)) {
 			return FALSE;
 	}
-	if ((src_monitor>=0) && (dst_monitor>=0) && !memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
+	if (src_monitor && dst_monitor && !memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
 	{
-		error("Source and destination both refer to the same monitor");
+		error("Source and destination both map the same screen area");
 		return FALSE;
 	}
 
 	// if the source monitor is not yet decided, then use the rightmost monitor
-	if (src_monitor<0) {
-		select_rightmost_monitor_but(gscreen, &src_monitor, &src_rect, ((dst_monitor>=0)?&dst_rect:NULL));
+	if (src_monitor == NULL) {
+		select_rightmost_monitor_but(gdisplay, &src_monitor, &src_rect,
+				(dst_monitor ? &dst_rect : NULL));
 	}
 
 	// if the destination_monitor is not yet decided, then use the first unused monitor
-	if (dst_monitor<0) {
-		select_any_monitor_but(gscreen, &dst_monitor, &dst_rect,
-			((src_monitor>=0)?&src_rect:NULL));
+	if (dst_monitor == NULL) {
+		select_any_monitor_but(gdisplay, &dst_monitor, &dst_rect,
+				(src_monitor ? &src_rect : NULL));
 	}
 
-	if ((src_monitor<0) || (dst_monitor<0)) {
+	if (src_monitor && dst_monitor) {
+		return TRUE;
+	} else {
+		unselect_monitor(&src_monitor, &src_rect);
+		unselect_monitor(&dst_monitor, &dst_rect);
+
 		error("Could not find any monitor to be cloned");
 		return FALSE;
 	}
-	return TRUE;
 }
 
 //
