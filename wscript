@@ -32,6 +32,9 @@ def configure (conf):
 	conf.check_cfg(package="libnotify", args="--cflags --libs", uselib_store="LIBNOTIFY",
 			mandatory=False)
 
+	conf.check_cfg(package="ayatana-appindicator3-0.1", args="--cflags --libs",
+			uselib_store="APPINDICATOR", mandatory=False)
+
 	have_xfixes = conf.check_cfg(package="xfixes", args="--cflags --libs",
 			uselib_store="XFIXES", mandatory=False)
 
@@ -53,6 +56,7 @@ def configure (conf):
 	if any(((x not in conf.env.define_key) for x in 
 		('HAVE_XI', 'HAVE_XRANDR', 'HAVE_LIBNOTIFY',
 		 'HAVE_XFIXES', 'HAVE_XDAMAGE', 'HAVE_XEXT',
+                 'HAVE_APPINDICATOR'
 		))):
 			Logs.pprint("YELLOW", "NOTE: one or more libraries were not found on your system, squint will work in degraded mode");
 
@@ -61,7 +65,7 @@ def build (bld):
 	bld.program(
 		target="squint",
 		source="squint.c",
-		uselib="GTK XI XFIXES XEXT XDAMAGE XRANDR LIBNOTIFY"
+		uselib="GTK XI XFIXES XEXT XDAMAGE XRANDR LIBNOTIFY APPINDICATOR"
 	)
 
 	bld.install_as("${PREFIX}/share/squint/squint.png", "squint.png")

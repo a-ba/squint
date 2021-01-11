@@ -57,11 +57,12 @@ If you want to force using a monitor at startup you can give their name (as
 listed by the **xrandr** command) in the command line or just **-** to use
 autodetection.
 
-= SYSTEM TRAY ICON =
+= APPLICATION INDICATOR =
 
-An icon is displayed in the system tray permit user interactions at runtime.
-Click on it to enable or disable squint's activity. A right click opens a menu.
+An icon is added into the appindicator area to allow user interactions at
+runtime.
 
+Normal click opens a menu. Middle-button click enables or disables squint.
 
 = EXAMPLES =
 

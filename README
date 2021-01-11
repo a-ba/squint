@@ -22,6 +22,7 @@ DEPENDENCIES
 		- libxrandr
 		- libxfixes
 		- libnotify
+		- libayatana-appindicator3
 
 		- txt2tags gzip  (for the man page)
 

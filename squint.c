@@ -20,6 +20,9 @@
 #ifdef HAVE_LIBNOTIFY
 #include <libnotify/notify.h>
 #endif
+#ifdef HAVE_APPINDICATOR
+#include <libayatana-appindicator/app-indicator.h>
+#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -44,8 +47,6 @@ GdkMonitor* dst_monitor = NULL;
 
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
-GtkStatusIcon* status_icon = NULL;
-GtkWidget* menu = NULL;
 Window root_window = 0;
 GdkRectangle root_window_rect;
 Window window = 0;
@@ -56,8 +57,7 @@ GC gc_white = NULL;
 GdkDisplay* gdisplay = NULL;
 Display* display = NULL;
 int raised = 0;
-GdkPixbuf* icon_enabled  = NULL;
-GdkPixbuf* icon_disabled = NULL;
+GdkPixbuf* icon = NULL;
 gint refresh_timer = 0;
 Atom net_active_window_atom = 0;
 
@@ -107,9 +107,20 @@ uint8_t*  cursor_mask_pixels;
 int xrandr_event_base = 0;
 #endif
 
+#ifdef HAVE_APPINDICATOR
+AppIndicator* app_indicator = NULL;
+struct
+{
+	GtkMenuShell* shell;
+	int update_index;
+} menu
+= {NULL, 0};
+
+void refresh_app_indicator();
+#endif
+
 gboolean enable();
 void disable();
-gboolean on_status_icon_activated(GtkWidget* widget, gpointer data);
 
 void
 show_about_dialog()
@@ -119,7 +130,7 @@ show_about_dialog()
 		NULL,
 		"copyright",	"© 2013, 2014 Anthony Baire",
 		"license-type",	GTK_LICENSE_GPL_3_0,
-		"logo",		icon_enabled,
+		"logo",		icon,
 		"program-name",	APPNAME " " VERSION,
 		"website",	"https://bitbucket.org/a_ba/squint",
 		"website-label","https://bitbucket.org/a_ba/squint",
@@ -138,9 +149,8 @@ error (const char* msg)
 			msg,
 			NULL
 		);
-		if(icon_enabled) {
-			notify_notification_set_image_from_pixbuf(
-				notif, icon_enabled);
+		if (icon) {
+			notify_notification_set_image_from_pixbuf(notif, icon);
 		}
 
 		gboolean ok = notify_notification_show(notif, NULL);
@@ -293,14 +303,23 @@ update_monitor_config(const char** monitor_name, int id)
 	}
 }
 
+#ifdef HAVE_APPINDICATOR
 void
 on_menu_item_activate(gpointer pointer, gpointer user_data)
 {
+	if (menu.update_index >= 0) {
+		return;
+	}
+
 	intptr_t code = (intptr_t)user_data;
 	switch (code & ITEM_MASK)
 	{
 	case ITEM_ENABLE:
-		on_status_icon_activated(NULL, NULL);
+		if (enabled) {
+			disable();
+		} else {
+			enable();
+		}
 		break;
 	
 	case ITEM_FULLSCREEN:
@@ -328,146 +347,166 @@ reset:
 	if (enabled) {
 		disable();
 		enable();
-	}
-}
-
-gboolean
-on_status_icon_activated(GtkWidget* widget, gpointer data)
-{
-	if (enabled) {
-		disable();
 	} else {
-		enable();
+		refresh_app_indicator();
 	}
-	return FALSE;
 }
 
-void populate_menu_with_monitor_config(GtkWidget* menu, const char* description, const char** config_name, GdkMonitor* active_monitor, intptr_t userdata)
+void
+connect_menu_item(GtkWidget* item, intptr_t user_data) {
+	g_signal_connect(item, "activate", G_CALLBACK (on_menu_item_activate), (gpointer) user_data);
+}
+
+void
+populate_menu_with_monitors(int index, const char* config_name, GdkMonitor* active_monitor, intptr_t userdata)
 {
-	GtkWidget* item;
+	void append(int* index, GtkWidget* item) {
+		if (*index < 0) {
+			gtk_menu_shell_append(menu.shell, item);
+		} else {
+			gtk_menu_shell_insert(menu.shell, item, (*index)++);
+		}
+	}
 
-	item = gtk_separator_menu_item_new();
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-
-	item = gtk_menu_item_new_with_label(description);
-	gtk_widget_set_sensitive(item, FALSE);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-
-	GtkWidget* auto_item;
-	auto_item = gtk_check_menu_item_new_with_label("Auto");
-	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(auto_item), !*config_name);
-	g_signal_connect (auto_item, "activate", G_CALLBACK (on_menu_item_activate),
-			(gpointer) (userdata | ITEM_AUTO));
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), auto_item);
+	// Auto button
+	GtkWidget* auto_item = gtk_check_menu_item_new_with_label("Auto");
+	{
+		if (config_name == NULL) {
+			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(auto_item), TRUE);
+		}
+		connect_menu_item(auto_item, userdata | ITEM_AUTO);
+		append(&index, auto_item);
+	}
 
 	int i, n = gdk_display_get_n_monitors(gdisplay);
-	int current = -1;
+	gboolean found = FALSE;
 	char buff[64];
+	GtkWidget* item;
 	for (i=0 ; i<n ; i++)
 	{
 		GdkMonitor* monitor = gdk_display_get_monitor(gdisplay, i);
 		const char* name = gdk_monitor_get_model(monitor);
-		if (enabled && !*config_name && (monitor==active_monitor)) {
-			current = i;
-			g_snprintf(buff, 64, "Auto (%s)", name);
-			gtk_menu_item_set_label(GTK_MENU_ITEM(auto_item), buff);
-		}
 
 		GdkRectangle r;
 		gdk_monitor_get_geometry(monitor, &r);
-
 		g_snprintf(buff, 64, "%s %d×%d", name , r.width, r.height);
 
 		item = gtk_check_menu_item_new_with_label(buff);
-		
-		if (*config_name && !strcmp(*config_name, name)) {
-			current = i;
+		connect_menu_item(item, userdata | (i & 0xff));
+		append(&index, item);
+
+		if (config_name == NULL) {
+			if (enabled && monitor==active_monitor) {
+				g_snprintf(buff, 64, "Auto (%s)", name);
+				gtk_menu_item_set_label(GTK_MENU_ITEM(auto_item), buff);
+			}
+		} else if (!strcmp(config_name, name)) {
+			found = TRUE;
 			gtk_check_menu_item_set_active(
-				GTK_CHECK_MENU_ITEM(item), TRUE);
+					GTK_CHECK_MENU_ITEM(item), TRUE);
 		}
-		g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
-				(gpointer) (userdata | (i&0xff)));
-		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 	}
-	if ((current<0) && *config_name) {
+	if (!found && config_name) {
 		// choosen monitor is not active
-		item = gtk_check_menu_item_new_with_label(*config_name);
+		item = gtk_check_menu_item_new_with_label(config_name);
 		gtk_check_menu_item_set_active(
 			GTK_CHECK_MENU_ITEM(item), TRUE);
-		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+		append(&index, item);
 	}
+	gtk_widget_show_all(GTK_WIDGET(menu.shell));
 }
 
 void
-destroy_widget(GtkWidget* widget, gpointer data)
+init_app_indicator()
 {
-	gtk_widget_destroy(widget);
-}
-
-void
-on_status_icon_popup_menu(GtkStatusIcon* widget, guint button, guint activate_time, gpointer data)
-{
+	// initialise the menu
 	GtkWidget* item;
+	menu.shell = GTK_MENU_SHELL(gtk_menu_new());
 
-	// clear the previous menu
-	gtk_container_foreach(GTK_CONTAINER(menu), &destroy_widget, NULL);
-
-	item = gtk_menu_item_new_with_label("Squint");
-	gtk_widget_set_sensitive(item, FALSE);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-
+	// enabled
 	item = gtk_check_menu_item_new_with_label("Enabled");
-	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), enabled);
-	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
-			(gpointer) ITEM_ENABLE);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	connect_menu_item(item, ITEM_ENABLE);
+	gtk_menu_shell_append(menu.shell, item);
+	GtkWidget* enabled_item = item;
 
+	// fullscreen
 	item = gtk_check_menu_item_new_with_label("Fullscreen");
 	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_window);
-	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
-			(gpointer) ITEM_FULLSCREEN);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	connect_menu_item(item, ITEM_FULLSCREEN);
+	gtk_menu_shell_append(menu.shell, item);
 	
-	item = gtk_image_menu_item_new_from_stock(GTK_STOCK_ABOUT, NULL);
-	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
-			(gpointer) ITEM_ABOUT);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	// about
+	item = gtk_menu_item_new_with_label("About");
+	connect_menu_item(item, ITEM_ABOUT);
+	gtk_menu_shell_append(menu.shell, item);
 
-	item = gtk_image_menu_item_new_from_stock(GTK_STOCK_QUIT, NULL);
-	g_signal_connect (item, "activate", G_CALLBACK (on_menu_item_activate),
-			(gpointer) ITEM_QUIT);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	// quit
+	item = gtk_menu_item_new_with_label("Quit");
+	connect_menu_item(item, ITEM_QUIT);
+	gtk_menu_shell_append(menu.shell, item);
 
-	populate_menu_with_monitor_config(menu, "Source monitor", &config.src_monitor_name, src_monitor, ITEM_SRC_MONITOR);
-	populate_menu_with_monitor_config(menu, "Destination monitor", &config.dst_monitor_name, dst_monitor, ITEM_DST_MONITOR);
 
-	gtk_widget_show_all(menu);
-	gtk_menu_popup(GTK_MENU(menu), NULL, NULL, NULL, NULL, button, activate_time);
+	// monitors
+	const char*  mon_labels[] = {"Source monitor", "Destination monitor"};
+	const intptr_t mon_data[] = {ITEM_SRC_MONITOR, ITEM_DST_MONITOR};
+	for (int i=0; i<2 ; i++) {
+		gtk_menu_shell_append(menu.shell, gtk_separator_menu_item_new());
+
+		item = gtk_menu_item_new_with_label(mon_labels[i]);
+		gtk_widget_set_sensitive(item, FALSE);
+		gtk_menu_shell_append(menu.shell, item);
+
+		item = gtk_check_menu_item_new_with_label("Auto");
+		connect_menu_item(item, mon_data[i] | ITEM_AUTO);
+		gtk_menu_shell_append(menu.shell, item);
+	}
+
+	// initialise the app_indicator
+	app_indicator = app_indicator_new_with_path("squint", "",
+			APP_INDICATOR_CATEGORY_APPLICATION_STATUS,
+			PREFIX "/share/squint");
+	app_indicator_set_icon_full(app_indicator, "squint-disabled", "squint disabled");
+	app_indicator_set_attention_icon_full(app_indicator, "squint", "squint enabled");
+	app_indicator_set_secondary_activate_target(app_indicator, enabled_item);
+
+	g_object_ref(menu.shell);
+	app_indicator_set_menu(app_indicator, GTK_MENU(menu.shell));
 }
 
 void
-refresh_status_icon()
+refresh_app_indicator()
 {
-	if (enabled) {
-		if (icon_enabled) {
-			gtk_status_icon_set_from_pixbuf(status_icon, icon_enabled);
-		} else {
-			gtk_status_icon_set_from_stock(status_icon, GTK_STOCK_YES);
+	void each_menu_item(GtkWidget* item, gpointer cb_data)
+	{
+		switch (menu.update_index++) {
+		case 0:
+			// enabled button
+			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), enabled);
+			break;
+		case 1:
+			// fullscreen button
+			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_window);
+			break;
+		default:
+			// delete all other GtkTypeCheckMenuItem objects
+			if (G_OBJECT_TYPE(item) == GTK_TYPE_CHECK_MENU_ITEM) {
+				gtk_container_remove(GTK_CONTAINER(menu.shell), item);
+			}
 		}
-		gtk_status_icon_set_tooltip_text(status_icon,
-			"squint enabled"
-		);
-	} else {
-		if (icon_disabled) {
-			gtk_status_icon_set_from_pixbuf(status_icon, icon_disabled);
-		} else {
-			gtk_status_icon_set_from_stock(status_icon, GTK_STOCK_NO);
-		}
-			gtk_status_icon_set_tooltip_text(status_icon,
-			"squint disabled"
-		);
 	}
+
+	app_indicator_set_status(app_indicator, enabled
+			? APP_INDICATOR_STATUS_ATTENTION
+			: APP_INDICATOR_STATUS_ACTIVE);
+
+	menu.update_index = 0;
+	gtk_container_foreach(GTK_CONTAINER(menu.shell), each_menu_item, NULL);
+	populate_menu_with_monitors(-1, config.dst_monitor_name, dst_monitor, ITEM_DST_MONITOR);
+	populate_menu_with_monitors(6,  config.src_monitor_name, src_monitor, ITEM_SRC_MONITOR);
+	menu.update_index = -1;
+
 }
+#endif
 
 void
 refresh_cursor_location(gboolean force)
@@ -1279,14 +1318,8 @@ init()
 	// load the icons
 	{
 		GError* err = NULL;
-		icon_enabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
-		if (!icon_enabled)
-		{
-			error(err->message);
-			g_clear_error (&err);
-		}
-		icon_disabled = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint-disabled.png", &err);
-		if (!icon_disabled)
+		icon = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
+		if (!icon)
 		{
 			error(err->message);
 			g_clear_error (&err);
@@ -1323,17 +1356,11 @@ init()
 		}
 	}
 
+#ifdef HAVE_APPINDICATOR
 	// create the status icon in the tray
-	status_icon = gtk_status_icon_new();
-	refresh_status_icon();
-	menu = gtk_menu_new();
-
-	// register the events
-	// - status_icon clicked
-	g_signal_connect (status_icon, "activate", G_CALLBACK(on_status_icon_activated), NULL);
-
-	// - status_icon context menu
-	g_signal_connect (status_icon, "popup-menu", G_CALLBACK(on_status_icon_popup_menu), NULL);
+	init_app_indicator();
+	refresh_app_indicator();
+#endif
 
 
 #ifdef HAVE_XRANDR
@@ -1535,8 +1562,8 @@ enable_window()
 		// create the window
 		gtkwin = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 		gtk_window_set_resizable(GTK_WINDOW(gtkwin), TRUE);
-		if (icon_enabled) {
-			gtk_window_set_icon (GTK_WINDOW(gtkwin), icon_enabled);
+		if (icon) {
+			gtk_window_set_icon (GTK_WINDOW(gtkwin), icon);
 		}
 
 		// map my window
@@ -1685,7 +1712,9 @@ enable()
 	XClearWindow(display, gdk_x11_window_get_xid(gdkwin));
 
 	enabled = TRUE;
-	refresh_status_icon();
+#ifdef HAVE_APPINDICATOR
+	refresh_app_indicator();
+#endif
 	return TRUE;
 }
 
@@ -1723,7 +1752,9 @@ disable()
 	disable_window();
 
 	enabled = FALSE;
-	refresh_status_icon();
+#ifdef HAVE_APPINDICATOR
+	refresh_app_indicator();
+#endif
 	return;
 }
 
