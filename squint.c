@@ -17,9 +17,6 @@
 #ifdef HAVE_XRANDR
 #include <X11/extensions/Xrandr.h>
 #endif
-#ifdef HAVE_LIBNOTIFY
-#include <libnotify/notify.h>
-#endif
 #ifdef HAVE_APPINDICATOR
 #include <libayatana-appindicator/app-indicator.h>
 #endif
@@ -45,6 +42,7 @@ GdkMonitor* src_monitor = NULL;
 GdkMonitor* dst_monitor = NULL;
 
 
+GApplication* gtkapp = NULL;
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
 Window root_window = 0;
@@ -58,6 +56,7 @@ GdkDisplay* gdisplay = NULL;
 Display* display = NULL;
 int raised = 0;
 GdkPixbuf* icon = NULL;
+GIcon* gicon = NULL;
 gint refresh_timer = 0;
 Atom net_active_window_atom = 0;
 
@@ -143,25 +142,14 @@ show_about_dialog()
 void
 error (const char* msg)
 {
-#ifdef HAVE_LIBNOTIFY
-	if (notify_is_initted())
-	{
-		NotifyNotification* notif = notify_notification_new(
-			APPNAME " error",
-			msg,
-			NULL
-		);
-		if (icon) {
-			notify_notification_set_image_from_pixbuf(notif, icon);
-		}
-
-		gboolean ok = notify_notification_show(notif, NULL);
-		g_object_unref(notif);
-		if(ok)
-			return;
+	if (g_application_get_is_registered(gtkapp)) {
+		GNotification* notif = g_notification_new(APPNAME " error");
+		g_notification_set_body(notif, msg);
+		g_notification_set_icon(notif, gicon);
+		g_application_send_notification(gtkapp, NULL, notif);
+	} else {
+		fprintf(stderr, "error: %s\n", msg);
 	}
-#endif
-	fprintf(stderr, "error: %s\n", msg);
 }
 
 void
@@ -329,7 +317,7 @@ on_menu_item_activate(gpointer pointer, gpointer user_data)
 		goto reset;
 
 	case ITEM_QUIT:
-		gtk_main_quit();
+		g_application_release(gtkapp);
 		break;
 	
 	case ITEM_SRC_MONITOR:
@@ -1304,12 +1292,14 @@ init_xrandr()
 }
 #endif
 
+
 gboolean
 init()
 {
-#ifdef HAVE_LIBNOTIFY
-	notify_init(APPNAME);
-#endif
+	gtkapp = G_APPLICATION(gtk_application_new("org.github.a-ba.squint",
+				G_APPLICATION_NON_UNIQUE));
+	g_application_hold(gtkapp);
+
 
 	gdisplay = gdk_display_get_default();
 	if (!gdisplay) {
@@ -1320,13 +1310,15 @@ init()
 	{
 		GError* err = NULL;
 
-		// load the icons
-		icon = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
+		// load the icon
+		const char* icon_path = PREFIX "/share/squint/squint.png";
+		icon = gdk_pixbuf_new_from_file (icon_path, &err);
 		if (!icon)
 		{
 			error(err->message);
 			g_clear_error (&err);
 		}
+		gicon = g_file_icon_new(g_file_new_for_path(icon_path));
 
 		// load the css
 		GtkCssProvider* css_provider = gtk_css_provider_new();
@@ -1807,6 +1799,7 @@ main (int argc, char *argv[])
 		return 0;
 	}
 
+	// TODO: manage args w/ GApplication
 	switch (argc)
 	{
 		case 3:
@@ -1834,7 +1827,5 @@ main (int argc, char *argv[])
 		enable();
 	}
 
-	gtk_main ();
-
-	return 0;
+	return g_application_run(gtkapp, argc, argv);
 }

@@ -29,9 +29,6 @@ def configure (conf):
 	conf.check_cfg(package="xrandr", args="--cflags --libs", uselib_store="XRANDR",
 			mandatory=False)
 
-	conf.check_cfg(package="libnotify", args="--cflags --libs", uselib_store="LIBNOTIFY",
-			mandatory=False)
-
 	conf.check_cfg(package="ayatana-appindicator3-0.1", args="--cflags --libs",
 			uselib_store="APPINDICATOR", mandatory=False)
 
@@ -54,7 +51,7 @@ def configure (conf):
 	conf.find_program("gzip", mandatory=False)
 
 	if any(((x not in conf.env.define_key) for x in 
-		('HAVE_XI', 'HAVE_XRANDR', 'HAVE_LIBNOTIFY',
+		('HAVE_XI', 'HAVE_XRANDR',
 		 'HAVE_XFIXES', 'HAVE_XDAMAGE', 'HAVE_XEXT',
                  'HAVE_APPINDICATOR'
 		))):
@@ -65,7 +62,7 @@ def build (bld):
 	bld.program(
 		target="squint",
 		source="squint.c",
-		uselib="GTK XI XFIXES XEXT XDAMAGE XRANDR LIBNOTIFY APPINDICATOR"
+		uselib="GTK XI XFIXES XEXT XDAMAGE XRANDR APPINDICATOR"
 	)
 
 	bld.install_as("${PREFIX}/share/squint/squint.png", "squint.png")
