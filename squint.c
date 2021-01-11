@@ -122,6 +122,8 @@ void refresh_app_indicator();
 gboolean enable();
 void disable();
 
+const char* css = "window { background-color: black; }";
+
 void
 show_about_dialog()
 {
@@ -1315,15 +1317,30 @@ init()
 		return FALSE;
 	}
 
-	// load the icons
 	{
 		GError* err = NULL;
+
+		// load the icons
 		icon = gdk_pixbuf_new_from_file (PREFIX "/share/squint/squint.png", &err);
 		if (!icon)
 		{
 			error(err->message);
 			g_clear_error (&err);
 		}
+
+		// load the css
+		GtkCssProvider* css_provider = gtk_css_provider_new();
+		gtk_css_provider_load_from_data(css_provider, css, strlen(css), &err);
+		if (err) {
+			error(err->message);
+			g_clear_error (&err);
+		} else {
+			gtk_style_context_add_provider_for_screen(
+					gdk_display_get_default_screen(gdisplay),
+					GTK_STYLE_PROVIDER(css_provider),
+					GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+		}
+
 	}
 	cursor_icon = gdk_cursor_new_for_display(gdisplay, GDK_X_CURSOR);
 
@@ -1599,10 +1616,6 @@ enable_window()
 
 	// override the cursor icon
 	gdk_window_set_cursor(gdkwin, cursor_icon);
-
-	// black background
-	GdkRGBA black = {0,0,0,1};
-	gtk_widget_override_background_color(gtkwin, 0, &black);
 
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, src_rect.width, src_rect.height, depth);
