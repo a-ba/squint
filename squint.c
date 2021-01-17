@@ -654,11 +654,12 @@ squint_enable()
 void
 squint_disable()
 {
+	enabled = FALSE;
+
 	x11_disable();
 
 	disable_window();
 
-	enabled = FALSE;
 #ifdef HAVE_APPINDICATOR
 	refresh_app_indicator();
 #endif

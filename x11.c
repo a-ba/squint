@@ -422,6 +422,7 @@ x11_disable_copy_cursor()
 	if (!copy_cursor) {
 		return;
 	}
+	copy_cursor = FALSE;
 
 	XDestroyWindow(display, cursor_window);
 	cursor_window = 0;
@@ -436,8 +437,6 @@ x11_disable_copy_cursor()
 	XDestroyImage(cursor_image);
 	XDestroyImage(cursor_mask_image);
 	cursor_image = cursor_mask_image = NULL;
-
-	copy_cursor = FALSE;
 }
 #endif
 
@@ -788,10 +787,9 @@ x11_disable_cursor_tracking()
 {
 	if(!track_cursor)
 		return;
+	track_cursor = FALSE;
 
 	x11_set_xi_eventmask(FALSE);
-
-	track_cursor = FALSE;
 }
 #endif
 
@@ -855,6 +853,7 @@ x11_disable_xdamage()
 	if (!use_xdamage) {
 		return;
 	}
+	use_xdamage = FALSE;
 
 	if (screen_region) {
 		XFixesDestroyRegion(display, screen_region);
@@ -865,8 +864,6 @@ x11_disable_xdamage()
 		XDamageDestroy(display, damage);
 		damage = 0;
 	}
-
-	use_xdamage = FALSE;
 }
 #endif
 
