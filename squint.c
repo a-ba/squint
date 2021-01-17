@@ -130,7 +130,7 @@ show_about_dialog()
 {
 	gtk_show_about_dialog(
 		NULL,
-		"copyright",	"© 2013, 2014 Anthony Baire",
+		"copyright",	"© 2013-2021 Anthony Baire",
 		"license-type",	GTK_LICENSE_GPL_3_0,
 		"logo",		icon,
 		"program-name",	APPNAME " " VERSION,
