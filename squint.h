@@ -16,26 +16,19 @@ struct {
 // State
 gboolean enabled;
 gboolean fullscreen;
-//GdkMonitor* src_monitor = NULL;
-//GdkMonitor* dst_monitor = NULL;
-//
-//
-//GApplication* gtkapp = NULL;
+int raised;
+
 GtkWidget* gtkwin;
 GdkWindow* gdkwin;
 GdkDisplay* gdisplay;
-//Display* display = NULL;
-//int raised = 0;
-//GIcon* gicon = NULL;
 
 GdkRectangle src_rect, dst_rect, active_window_rect;
 
-void show();
-void hide();
-void disable();
+void squint_show();
+void squint_hide();
+void squint_disable();
 
-
-void error(const char* msg);
+void squint_error(const char* msg);
 
 gboolean x11_init();
 void x11_enable();

@@ -16,24 +16,24 @@
 // State
 gboolean enabled = FALSE;
 gboolean fullscreen = FALSE;
-GdkMonitor* src_monitor = NULL;
-GdkMonitor* dst_monitor = NULL;
+static GdkMonitor* src_monitor = NULL;
+static GdkMonitor* dst_monitor = NULL;
 
 
-GApplication* gtkapp = NULL;
+static GApplication* gtkapp = NULL;
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
 GdkDisplay* gdisplay = NULL;
 int raised = 0;
-GdkPixbuf* icon = NULL;
-GIcon* gicon = NULL;
+static GdkPixbuf* icon = NULL;
+static GIcon* gicon = NULL;
 
-GdkCursor* cursor_icon = NULL;
+static GdkCursor* cursor_icon = NULL;
 
 
 #ifdef HAVE_APPINDICATOR
-AppIndicator* app_indicator = NULL;
-struct
+static AppIndicator* app_indicator = NULL;
+static struct
 {
 	GtkMenuShell* shell;
 	int update_index;
@@ -43,10 +43,9 @@ struct
 void refresh_app_indicator();
 #endif
 
-gboolean enable();
-void disable();
+static const char* css = "window { background-color: black; }";
 
-const char* css = "window { background-color: black; }";
+gboolean squint_enable();
 
 void
 show_about_dialog()
@@ -64,7 +63,7 @@ show_about_dialog()
 }
 
 void
-error (const char* msg)
+squint_error(const char* msg)
 {
 	if (g_application_get_is_registered(gtkapp)) {
 		GNotification* notif = g_notification_new(APPNAME " error");
@@ -77,7 +76,7 @@ error (const char* msg)
 }
 
 void
-show()
+squint_show()
 {
 	if (!raised)
 	{
@@ -102,7 +101,7 @@ do_hide()
 }
 
 void
-hide()
+squint_hide()
 {
 	if(raised)
 	{
@@ -129,7 +128,7 @@ on_window_button_press_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 gboolean
 on_window_delete_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 {
-	disable();
+	squint_disable();
 	return TRUE;
 }
 
@@ -170,9 +169,9 @@ on_menu_item_activate(gpointer pointer, gpointer user_data)
 	{
 	case ITEM_ENABLE:
 		if (enabled) {
-			disable();
+			squint_disable();
 		} else {
-			enable();
+			squint_enable();
 		}
 		break;
 	
@@ -199,8 +198,8 @@ on_menu_item_activate(gpointer pointer, gpointer user_data)
 	return;
 reset:
 	if (enabled) {
-		disable();
-		enable();
+		squint_disable();
+		squint_enable();
 	} else {
 		refresh_app_indicator();
 	}
@@ -373,7 +372,7 @@ init()
 
 	gdisplay = gdk_display_get_default();
 	if (!gdisplay) {
-		error("No display available");
+		squint_error("No display available");
 		return FALSE;
 	}
 
@@ -385,7 +384,7 @@ init()
 		icon = gdk_pixbuf_new_from_file (icon_path, &err);
 		if (!icon)
 		{
-			error(err->message);
+			squint_error(err->message);
 			g_clear_error (&err);
 		}
 		gicon = g_file_icon_new(g_file_new_for_path(icon_path));
@@ -394,7 +393,7 @@ init()
 		GtkCssProvider* css_provider = gtk_css_provider_new();
 		gtk_css_provider_load_from_data(css_provider, css, strlen(css), &err);
 		if (err) {
-			error(err->message);
+			squint_error(err->message);
 			g_clear_error (&err);
 		} else {
 			gtk_style_context_add_provider_for_screen(
@@ -459,7 +458,7 @@ select_monitor_by_name(GdkDisplay* dsp, const char* name,
 
 	char buff[128];
 	g_snprintf(buff, 128, "Monitor %s is not active", name);
-	error(buff);
+	squint_error(buff);
 	return FALSE;
 }
 
@@ -525,7 +524,7 @@ select_monitors()
 
 	n = gdk_display_get_n_monitors (gdisplay);
 	if ((n < 2) && !config.src_monitor_name) {
-		error ("There is only one monitor. What am I supposed to do?");
+		squint_error("There is only one monitor. What am I supposed to do?");
 		return FALSE;
 	}
 
@@ -540,7 +539,7 @@ select_monitors()
 	}
 	if (src_monitor && dst_monitor && !memcmp(&src_rect, &dst_rect, sizeof(GdkRectangle)))
 	{
-		error("Source and destination both map the same screen area");
+		squint_error("Source and destination both map the same screen area");
 		return FALSE;
 	}
 
@@ -562,7 +561,7 @@ select_monitors()
 		unselect_monitor(&src_monitor, &src_rect);
 		unselect_monitor(&dst_monitor, &dst_rect);
 
-		error("Could not find any monitor to be cloned");
+		squint_error("Could not find any monitor to be cloned");
 		return FALSE;
 	}
 }
@@ -651,7 +650,7 @@ disable_window()
 }
 
 gboolean
-enable()
+squint_enable()
 {
 	if (enabled) {
 		return TRUE;
@@ -673,7 +672,7 @@ enable()
 }
 
 void
-disable()
+squint_disable()
 {
 	x11_disable();
 
@@ -710,7 +709,7 @@ main (int argc, char *argv[])
 
 	if (!gtk_init_with_args (&argc, &argv, "[SourceMonitor [DestinationMonitor]]", option_entries, NULL, &err))
 	{
-		error(err->message);
+		squint_error(err->message);
 		return 1;
 	}
 
@@ -735,7 +734,7 @@ main (int argc, char *argv[])
 		case 1:
 			break;
 		default:
-			error("invalid arguments");
+			squint_error("invalid arguments");
 			return 1;
 	}
 
@@ -746,7 +745,7 @@ main (int argc, char *argv[])
 
 	// activation
 	if (!config.opt_disable) {
-		enable();
+		squint_enable();
 	}
 
 	return g_application_run(gtkapp, argc, argv);

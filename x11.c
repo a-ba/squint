@@ -194,10 +194,10 @@ x11_refresh_cursor_location(gboolean force)
 
 	if (cursor.x >= 0) {
 		/* raise the window when the pointer enters the duplicated screen */
-		show();
+		squint_show();
 	} else {
 		/* lower the window when the pointer leaves the duplicated screen */
-		hide();
+		squint_hide();
 	}
 
 	x11_fix_offset();
@@ -368,7 +368,7 @@ x11_enable_copy_cursor()
 	cursor_image = XCreateImage (display, NULL, 24, ZPixmap, 0, (char*)cursor_pixels,
 				CURSOR_SIZE, CURSOR_SIZE, 32, 256);
 	if (!cursor_image) {
-		error("XCreateImage() failed");
+		squint_error("XCreateImage() failed");
 		return;
 	}
 
@@ -386,14 +386,14 @@ x11_enable_copy_cursor()
 	cursor_mask_image = XCreateImage (display, NULL, 1, ZPixmap, 0, (char*)cursor_mask_pixels,
 				CURSOR_SIZE, CURSOR_SIZE, 8, CURSOR_SIZE/8);
 	if (!cursor_mask_image) {
-		error("XCreateImage() failed");
+		squint_error("XCreateImage() failed");
 		return;
 	}
 
 	// create a context for manipulating the mask
 	cursor_mask_gc = XCreateGC(display, cursor_mask_pixmap, 0, NULL); 
 	if(!cursor_mask_gc) {
-		error ("XCreateGC() failed");
+		squint_error("XCreateGC() failed");
 		return;
 	}
 
@@ -459,10 +459,10 @@ x11_show_active_window()
 	if((inter_src.height*inter_src.width) > (inter_dst.height*inter_dst.width))
 	{
 		// the active window overlaps more with the source screen
-		show();
+		squint_show();
 	} else {
 		// the active window overlaps more with the destination screen
-		hide();
+		squint_hide();
 	}
 }
 
@@ -729,7 +729,7 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 	if (xrandr_event_base)
 	{
 		if (ev->type == xrandr_event_base + RRScreenChangeNotify) {
-			disable();
+			squint_disable();
 		}
 	}
 #endif
@@ -954,7 +954,7 @@ x11_init()
 
 		gc = XCreateGC (display, root_window, GCSubwindowMode, &values);
 		if(!gc) {
-			error ("XCreateGC() failed");
+			squint_error("XCreateGC() failed");
 			return FALSE;
 		}
 
@@ -962,7 +962,7 @@ x11_init()
 		values.foreground = 0xe0e0e0;
 		gc_white = XCreateGC (display, root_window, GCLineWidth | GCForeground, &values);
 		if(!gc_white) {
-			error ("XCreateGC() failed");
+			squint_error("XCreateGC() failed");
 			return FALSE;
 		}
 	}
