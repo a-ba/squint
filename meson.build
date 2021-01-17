@@ -42,7 +42,7 @@ endif
 
 configure_file(configuration: cfg, output: 'config.h')
 
-executable('squint', 'squint.c', dependencies: deps, install: true)
+executable('squint', 'squint.c', 'x11.c', dependencies: deps, install: true)
 install_data('squint.png')
 install_data('squint-disabled.png')
 
