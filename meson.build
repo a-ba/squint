@@ -17,7 +17,7 @@ foreach d: [
 	['xfixes',			'HAVE_XFIXES'],
 	['xi',				'HAVE_XI'],
 	['xrandr',			'HAVE_XRANDR'],
-	['xext',			'HAVE_XEXT'],
+	['xrender',			'HAVE_XRENDER'],
 ]
 	dep = dependency(d[0], required: false)
 	if dep.found()
@@ -32,7 +32,7 @@ if cfg.has('HAVE_XFIXES') and cfg.has('HAVE_XDAMAGE')
 	cfg.set('USE_XDAMAGE', 1)
 endif
 
-if cfg.has('HAVE_XFIXES') and cfg.has('HAVE_XEXT')
+if cfg.has('HAVE_XFIXES') and cfg.has('HAVE_XRENDER')
 	cfg.set('COPY_CURSOR', 1)
 endif
 

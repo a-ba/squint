@@ -12,7 +12,7 @@
 #endif
 #ifdef COPY_CURSOR
 #include <X11/extensions/Xfixes.h>
-#include <X11/extensions/shape.h>
+#include <X11/extensions/Xrender.h>
 #endif
 #ifdef USE_XDAMAGE
 #include <X11/extensions/Xdamage.h>
@@ -31,6 +31,11 @@ static GC gc_white = NULL;
 static Display* display = NULL;
 static gint refresh_timer = 0;
 static Atom net_active_window_atom = 0;
+
+static GdkPoint backup;
+static Pixmap   backup_pixmap = 0;
+#define CURSOR_CROSSHAIR_LEN 3
+#define CURSOR_SIZE 9
 
 static Window active_window = 0;
 
@@ -58,25 +63,26 @@ static int xfixes_event_base;
 #endif
 
 #ifdef COPY_CURSOR
+#undef  CURSOR_SIZE
 #define CURSOR_SIZE 32
 static int copy_cursor = 0;
-static Window cursor_window = 0;
-static Pixmap cursor_pixmap = 0;
+static Pixmap  cursor_pixmap = 0;
+static Picture cursor_picture = 0;
 static XImage* cursor_image = NULL;
-static Pixmap  cursor_mask_pixmap = 0;
-static XImage* cursor_mask_image = NULL;
-static GC	cursor_mask_gc = NULL;
+static GC      cursor_gc = NULL;
+static Picture pixmap_picture = 0;
+
 static int cursor_xhot=0;
 static int cursor_yhot=0;
 static uint32_t* cursor_pixels;
-static uint8_t*  cursor_mask_pixels;
-#define CURSOR_MASK_SIZE (CURSOR_SIZE*CURSOR_SIZE/8)
+#define CURSOR_PIXELS_SIZE (sizeof(*cursor_pixels) * CURSOR_SIZE * CURSOR_SIZE)
 #endif
 
 #ifdef HAVE_XRANDR
 static int xrandr_event_base = 0;
 #endif
 
+void x11_redraw_cursor(gboolean do_clear);
 
 
 void
@@ -113,7 +119,9 @@ x11_adjust_offset_value(gint* offset, gint src, gint dst, gint cursor)
 	}
 }
 
-void
+// return true if offset was updated
+// NOTE: must clear the window if it returns true
+gboolean
 x11_fix_offset()
 {
 	GdkPoint offset_bak = {offset.x, offset.y};
@@ -122,22 +130,13 @@ x11_fix_offset()
 	x11_adjust_offset_value(&offset.x, src_rect.width,  dst_rect.width,  cursor.x);
 	x11_adjust_offset_value(&offset.y, src_rect.height, dst_rect.height, cursor.y);
 	
-	
-	if (memcmp(&offset, &offset_bak, sizeof(offset)))
-	{
+	gboolean updated = memcmp(&offset, &offset_bak, sizeof(offset));
+	if (updated) {
 		// offset was updated
 		// -> move the windows
 		XMoveWindow(display, window, offset.x, offset.y);
-#ifdef COPY_CURSOR
-		if (copy_cursor) {
-			XMoveWindow (display, cursor_window,
-					cursor.x - cursor_xhot + offset.x,
-					cursor.y - cursor_yhot + offset.y);
-		}
-#endif
-		// force redrawing the window
-		XClearWindow(display, window);
 	}
+	return updated;
 }
 
 
@@ -160,34 +159,8 @@ x11_refresh_cursor_location(gboolean force)
 		c.x = c.y = -1;
 	}
 
-	gboolean entered_screen, left_screen;
-
-	if (force) {
-		entered_screen = (c.x >=0);
-		left_screen = !entered_screen;
-	} else {
-		entered_screen = (cursor.x<0) && (c.x>=0);
-		left_screen    = (cursor.x>=0) && (c.x<0);
-	}
-
 	// cursor was really moved
 	cursor = c;
-
-#ifdef COPY_CURSOR
-	if (copy_cursor) {
-		if (left_screen) {
-			XUnmapWindow(display, cursor_window);
-		} else {
-			if (entered_screen) {
-				XMapWindow(display, cursor_window);
-			}
-			// move the cursor window to the new location of the cursor
-			XMoveWindow (display, cursor_window,
-					cursor.x - cursor_xhot + offset.x,
-					cursor.y - cursor_yhot + offset.y);
-		}
-	}
-#endif
 
 	if (cursor.x >= 0) {
 		/* raise the window when the pointer enters the duplicated screen */
@@ -197,7 +170,12 @@ x11_refresh_cursor_location(gboolean force)
 		squint_hide();
 	}
 
-	x11_fix_offset();
+	// update the offsets and redraw the cursor
+	gboolean updated = x11_fix_offset();
+	x11_redraw_cursor(!updated);
+	if (updated) {
+		XClearWindow(display, window);
+	}
 }
 
 gboolean
@@ -215,21 +193,12 @@ x11_refresh_image (gpointer data)
 					src_rect.width, src_rect.height,
 					0, 0);
 
-	// draw the cursor (crosshair)
-#ifdef COPY_CURSOR
-	if (!copy_cursor)
-#endif
-	if (cursor.x >= 0) {
-		#define LEN 3
-		XDrawLine (display, pixmap, gc_white, cursor.x-(LEN+1), cursor.y, cursor.x+(LEN+2), cursor.y);
-		XDrawLine (display, pixmap, gc_white, cursor.x, cursor.y-(LEN+1), cursor.x, cursor.y+(LEN+2));
-		XDrawLine (display, pixmap, gc, cursor.x-LEN, cursor.y, cursor.x+LEN, cursor.y);
-		XDrawLine (display, pixmap, gc, cursor.x, cursor.y-LEN, cursor.x, cursor.y+LEN);
-	}
+	// invalidate the backup_pixmap and redraw the cursor
+	backup.x = -CURSOR_SIZE;
+	x11_redraw_cursor(FALSE);
 
-	// force refreshing the window's background
+	// redraw the whole window
 	XClearWindow(display, window);
-
 
 	XFlush (display);
 
@@ -283,45 +252,24 @@ x11_refresh_cursor_image()
 
 	int x, y;
 	// copy the cursor image
-	for(x=0 ; x<width ; x++)
+	for(y=0 ; y<height ; y++)
 	{
-		for(y=0 ; y<height ; y++)
+		for(x=0 ; x<width ; x++)
 		{
 			cursor_pixels[y*CURSOR_SIZE + x] = img->pixels[y*img->width + x];
 		}
 	}
 
-	// copy the cursor mask
-	memset(cursor_mask_pixels, 0, CURSOR_MASK_SIZE);
-	for(y=0 ; y<height ; y++)
-	{
-		for(x=0 ; x<width ; x++)
-		{
-			uint8_t alpha = img->pixels[y*img->width + x] >> 24;
-			if (alpha > 0xb0)
-			{
-				cursor_mask_pixels[y*(CURSOR_SIZE/8) + (x/8)] |= 1 << (x % 8);
-			}
-		}
-	}
-
-	// upload the image & mask
-	XPutImage(display, cursor_pixmap, XDefaultGC(display, screen),
-			cursor_image, 0, 0, 0, 0, width, height);
-	XPutImage(display, cursor_mask_pixmap, cursor_mask_gc,
-			cursor_mask_image, 0, 0, 0, 0, CURSOR_SIZE, CURSOR_SIZE);
-
-	// apply the new mask
-	XShapeCombineMask(display, cursor_window, ShapeBounding, 0, 0, cursor_mask_pixmap,
-			ShapeSet);
-
-	// force redrawing the cursor window
-	XClearWindow(display, cursor_window);
-
+	// clear the cursor_pixmap and upload the new image
+	XFillRectangle(display, cursor_pixmap, cursor_gc, 0, 0, CURSOR_SIZE, CURSOR_SIZE);
+	XPutImage(display, cursor_pixmap, cursor_gc, cursor_image,
+			0, 0, 0, 0, width, height);
 	cursor_xhot = img->xhot;
 	cursor_yhot = img->yhot;
 
 	XFree(img);
+
+	x11_redraw_cursor(TRUE);
 }
 
 // enable the duplication of the cursor (with XFixes & XShape)
@@ -332,9 +280,6 @@ x11_refresh_cursor_image()
 // initialises:
 // 	cursor_image
 // 	cursor_pixmap
-// 	cursor_mask_image
-// 	cursor_mask_pixmap
-// 	cursor_mask_gc
 // 	cursor_window
 //
 void
@@ -349,20 +294,38 @@ x11_enable_copy_cursor()
 		return;
 	}
 
-	// check if xfixes and xshape are available on this display
-	int major, minor, error_base;
+	// ensure the screen supports 32 bit depth
+	{
+		int depth_count = 0;
+		int* depths = XListDepths(display, screen, &depth_count);
+		if (depths == NULL) {
+			return;
+		}
+		int i;
+		for (i=depth_count-1 ; i>=0 ; i--) {
+			if (depths[i] == 32) {
+				break;
+			}
+		}
+		XFree(depths);
+		if (i < 0) {
+			return;
+		}
+	}
+
+	// check if xfixes and xrender are available on this display
+	int major, minor, event_base, error_base;
 	if ((	   !XFixesQueryExtension(display, &xfixes_event_base, &error_base)
 		|| !XFixesQueryVersion(display, &major, &minor)
 		|| (major<1)
-		|| !XShapeQueryVersion(display, &major, &minor)
-		|| !(((major==1) && (minor >= 1)) || (major >= 2))
+		|| !XRenderQueryExtension(display, &event_base, &error_base)
 	)) {
 		return;
 	}
 
 	// create an image for storing the cursor
-	cursor_pixels = (uint32_t*) malloc(sizeof(*cursor_pixels)*CURSOR_SIZE*CURSOR_SIZE);
-	cursor_image = XCreateImage (display, NULL, 24, ZPixmap, 0, (char*)cursor_pixels,
+	cursor_pixels = (uint32_t*) malloc(CURSOR_PIXELS_SIZE);
+	cursor_image = XCreateImage(display, NULL, 32, ZPixmap, 0, (char*)cursor_pixels,
 				CURSOR_SIZE, CURSOR_SIZE, 32, 4*CURSOR_SIZE);
 	if (!cursor_image) {
 		squint_error("XCreateImage() failed");
@@ -370,40 +333,27 @@ x11_enable_copy_cursor()
 	}
 
 	// create a pixmap for storing the cursor
-	cursor_pixmap = XCreatePixmap (display, root_window,
-				CURSOR_SIZE, CURSOR_SIZE,
-				XDefaultDepth(display, screen));
+	cursor_pixmap = XCreatePixmap(display, root_window,
+				CURSOR_SIZE, CURSOR_SIZE, 32);
 
-	// create a pixmap for storing the mask
-	cursor_mask_pixmap = XCreatePixmap (display, root_window,
-				CURSOR_SIZE, CURSOR_SIZE, 1);
-
-	// create an image for storing the mask
-	cursor_mask_pixels = (uint8_t*) malloc(CURSOR_MASK_SIZE);
-	cursor_mask_image = XCreateImage (display, NULL, 1, ZPixmap, 0, (char*)cursor_mask_pixels,
-				CURSOR_SIZE, CURSOR_SIZE, 8, CURSOR_SIZE/8);
-	if (!cursor_mask_image) {
-		squint_error("XCreateImage() failed");
-		return;
-	}
-
-	// create a context for manipulating the mask
-	cursor_mask_gc = XCreateGC(display, cursor_mask_pixmap, 0, NULL); 
-	if(!cursor_mask_gc) {
+	// create a context for manipulating the cursor pixmap (must have 32-bit depth)
+	cursor_gc = XCreateGC(display, cursor_pixmap, 0, NULL);
+	if(!cursor_gc) {
 		squint_error("XCreateGC() failed");
 		return;
 	}
 
-	// create a sub-window displaying the cursor
-	XSetWindowAttributes attr;
-	attr.background_pixmap = cursor_pixmap;
-	cursor_window = XCreateWindow (display,
-				gdk_x11_window_get_xid(gdkwin),
-				10, 10,
-				CURSOR_SIZE, CURSOR_SIZE,
-				0, CopyFromParent,
-				InputOutput, CopyFromParent,
-				CWBackPixmap, &attr);
+	// create a picture for the cursor_pixmap
+	cursor_picture = XRenderCreatePicture(display, cursor_pixmap,
+			XRenderFindStandardFormat(display, PictStandardARGB32),
+			0, NULL);
+
+	// create a picture for the main pixmap
+	pixmap_picture = XRenderCreatePicture(display, pixmap,
+			XRenderFindStandardFormat(display, PictStandardRGB24),
+			0, NULL);
+
+	copy_cursor = TRUE;
 
 	// refresh the cursor
 	x11_refresh_cursor_image();
@@ -412,8 +362,6 @@ x11_enable_copy_cursor()
 
 	// request cursor change notifications
 	XFixesSelectCursorInput(display, gdk_x11_window_get_xid(gdkwin), XFixesCursorNotify);
-
-	copy_cursor = TRUE;
 }
 
 void
@@ -424,19 +372,25 @@ x11_disable_copy_cursor()
 	}
 	copy_cursor = FALSE;
 
-	XDestroyWindow(display, cursor_window);
-	cursor_window = 0;
+	if (pixmap_picture) {
+		XRenderFreePicture(display, pixmap_picture);
+		pixmap_picture = 0;
+	}
+	if (cursor_picture) {
+		XRenderFreePicture(display, cursor_picture);
+		cursor_picture = 0;
+	}
 
-	XFreeGC(display, cursor_mask_gc);
-	cursor_mask_gc = 0;
+	if (cursor_gc) {
+		XFreeGC(display, cursor_gc);
+		cursor_gc = NULL;
+	}
 
 	XFreePixmap(display, cursor_pixmap);
-	XFreePixmap(display, cursor_mask_pixmap);
-	cursor_pixmap = cursor_mask_pixmap = 0;
+	cursor_pixmap = 0;
 
 	XDestroyImage(cursor_image);
-	XDestroyImage(cursor_mask_image);
-	cursor_image = cursor_mask_image = NULL;
+	cursor_image = NULL;
 }
 #endif
 
@@ -638,14 +592,7 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 			case XI_RawMotion:
 				// cursor was moved
 				x11_refresh_cursor_location(FALSE);
-#ifdef USE_XDAMAGE
-#ifdef COPY_CURSOR
-				if(!copy_cursor)
-#endif
-				if(use_xdamage) {
-					x11_refresh_image(NULL);
-				}
-#endif
+
 				return GDK_FILTER_REMOVE;
 			case XI_RawKeyPress:
 				// a key was pressed
@@ -884,7 +831,9 @@ x11_on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   use
 
 	if(!fullscreen) {
 		memcpy(&dst_rect, &rect, sizeof(rect));
-		x11_fix_offset();
+		if (x11_fix_offset()) {
+			XClearWindow(display, window);
+		}
 	}
 
 #ifdef USE_XDAMAGE
@@ -894,21 +843,11 @@ x11_on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   use
 			if (window_mapped) {
 				window_mapped = 0;
 				XUnmapWindow(display, window);
-#ifdef COPY_CURSOR
-				if(copy_cursor) {
-					XUnmapWindow(display, cursor_window);
-				}
-#endif
 			}
 		} else {
 			if (!window_mapped) {
 				window_mapped = 1;
 				XMapWindow(display, window);
-#ifdef COPY_CURSOR
-				if(copy_cursor) {
-					XMapWindow(display, cursor_window);
-				}
-#endif
 			}
 		}
 	}
@@ -978,6 +917,74 @@ x11_on_squint_window_draw(GtkWidget* widget, void* cairo_ctx, gpointer user_data
 	return TRUE;
 }
 
+void
+x11_redraw_cursor(gboolean do_clear)
+{
+	GdkPoint clear = backup;
+
+	// erase the previous cursor (if any)
+	if (backup.x != -CURSOR_SIZE)
+	{
+		XCopyArea(display, backup_pixmap, pixmap, gc,
+				0, 0,
+				CURSOR_SIZE, CURSOR_SIZE,
+				backup.x, backup.y);
+		backup.x = -CURSOR_SIZE;
+	}
+
+	// draw the new cursor (if on screen)
+	if (cursor.x >= 0)
+	{
+#ifdef COPY_CURSOR
+		if (copy_cursor) {
+			backup.x = cursor.x - cursor_xhot;
+			backup.y = cursor.y - cursor_yhot;
+			XCopyArea(display, pixmap, backup_pixmap, gc,
+					backup.x, backup.y,
+					CURSOR_SIZE, CURSOR_SIZE,
+					0, 0);
+			XRenderComposite(display, PictOpOver,
+					cursor_picture, 0,
+					pixmap_picture,
+					0, 0, 0, 0,
+					backup.x, backup.y, CURSOR_SIZE, CURSOR_SIZE);
+		}
+		else
+#endif
+		{
+			const int len = CURSOR_CROSSHAIR_LEN;
+			backup.x = cursor.x - (len+1);
+			backup.y = cursor.y - (len+1);
+			XCopyArea(display, pixmap, backup_pixmap, gc,
+					backup.x, backup.y,
+					CURSOR_SIZE, CURSOR_SIZE,
+					0, 0);
+			XDrawLine(display, pixmap, gc_white,
+					cursor.x-(len+1), cursor.y,
+					cursor.x+(len+2), cursor.y);
+			XDrawLine(display, pixmap, gc_white,
+					cursor.x, cursor.y-(len+1),
+					cursor.x, cursor.y+(len+2));
+			XDrawLine(display, pixmap, gc,
+					cursor.x-len, cursor.y,
+					cursor.x+len, cursor.y);
+			XDrawLine(display, pixmap, gc,
+					cursor.x, cursor.y-len,
+					cursor.x, cursor.y+len);
+
+		}
+		if (do_clear) {
+			XClearArea(display, window, backup.x, backup.y,
+					CURSOR_SIZE, CURSOR_SIZE, FALSE);
+		}
+	}
+	// redraw the erased area
+	// (do it after drawing the new cursor to avoid flickering)
+	if (do_clear && (clear.x != -CURSOR_SIZE)) {
+		XClearArea(display, window, clear.x, clear.y, CURSOR_SIZE, CURSOR_SIZE, FALSE);
+	}
+}
+
 //
 // Prepare the window to host the duplicated screen (create the pixmap, subwindow)
 //
@@ -1025,6 +1032,11 @@ x11_enable_window()
 		XMapWindow(display, window);
 	}
 
+	// create a backup pixmap for storing the background (below the cursor)
+	backup.x = -CURSOR_SIZE;
+	backup_pixmap = XCreatePixmap(display, root_window,
+				CURSOR_SIZE, CURSOR_SIZE, 24);
+
 	// force refreshing the cursor position
 	x11_refresh_cursor_location(TRUE);
 }
@@ -1032,6 +1044,10 @@ x11_enable_window()
 void
 x11_disable_window()
 {
+	XFreePixmap(display, backup_pixmap);
+	backup_pixmap = 0;
+	backup.x = -CURSOR_SIZE;
+
 	XDestroyWindow(display, window);
 	window = 0;
 
