@@ -635,15 +635,11 @@ enable_window()
 
 	// hide the window for the moment
 	do_hide();
-
-	x11_enable_window();
 }
 
 void
 disable_window()
 {
-	x11_disable_window();
-	
 	gtk_widget_destroy(gtkwin);
 	gdkwin = NULL;
 	gtkwin = NULL;

@@ -1054,6 +1054,8 @@ x11_disable_focus_tracking()
 void
 x11_enable()
 {
+	x11_enable_window();
+
 	x11_enable_focus_tracking();
 	
 #ifdef HAVE_XI
@@ -1124,4 +1126,6 @@ x11_disable()
 	x11_disable_xdamage();
 #endif
 	x11_disable_focus_tracking();
+
+	x11_disable_window();
 }

@@ -33,6 +33,3 @@ void squint_error(const char* msg);
 gboolean x11_init();
 void x11_enable();
 void x11_disable();
-
-void x11_enable_window();
-void x11_disable_window();
