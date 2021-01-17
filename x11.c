@@ -43,12 +43,12 @@ static GdkPoint offset;
 static GdkPoint cursor;
 
 #ifdef HAVE_XI
-static gboolean track_cursor = FALSE;
+static gboolean can_track_cursor = FALSE;
 static int xi_opcode = 0;
 #endif
 
 #ifdef HAVE_XDAMAGE
-static gboolean use_xdamage = FALSE;
+static gboolean can_use_xdamage = FALSE;
 static int window_mapped = 1;
 static int xdamage_event_base;
 static Damage damage = 0;
@@ -181,7 +181,7 @@ gboolean
 x11_refresh_image (gpointer data)
 {
 #ifdef HAVE_XI
-	if (!track_cursor)
+	if (!can_track_cursor)
 #endif
 	{
 		x11_refresh_cursor_location(FALSE);
@@ -271,23 +271,9 @@ x11_refresh_cursor_image()
 	x11_redraw_cursor(TRUE);
 }
 
-// enable the duplication of the cursor (with XFixes & XShape)
-//
-// state:
-// 	copy_cursor
-//
-// initialises:
-// 	cursor_image
-// 	cursor_pixmap
-// 	cursor_window
-//
 void
-x11_enable_copy_cursor()
+x11_init_copy_cursor()
 {
-	if (copy_cursor) {
-		return;
-	}
-
 	// ensure we are in true color
 	if (XDefaultDepth(display, screen) != 24) {
 		return;
@@ -313,7 +299,7 @@ x11_enable_copy_cursor()
 	}
 
 	// check if xfixes and xrender are available on this display
-	int major, minor, event_base, error_base;
+	int major=1, minor=0, event_base, error_base;
 	if ((	   !XFixesQueryExtension(display, &xfixes_event_base, &error_base)
 		|| !XFixesQueryVersion(display, &major, &minor)
 		|| (major<1)
@@ -346,6 +332,14 @@ x11_enable_copy_cursor()
 	cursor_picture = XRenderCreatePicture(display, cursor_pixmap,
 			XRenderFindStandardFormat(display, PictStandardARGB32),
 			0, NULL);
+}
+
+void
+x11_enable_copy_cursor()
+{
+	if (copy_cursor || (cursor_picture == 0)) {
+		return;
+	}
 
 	// create a picture for the main pixmap
 	pixmap_picture = XRenderCreatePicture(display, pixmap,
@@ -375,21 +369,6 @@ x11_disable_copy_cursor()
 		XRenderFreePicture(display, pixmap_picture);
 		pixmap_picture = 0;
 	}
-	if (cursor_picture) {
-		XRenderFreePicture(display, cursor_picture);
-		cursor_picture = 0;
-	}
-
-	if (cursor_gc) {
-		XFreeGC(display, cursor_gc);
-		cursor_gc = NULL;
-	}
-
-	XFreePixmap(display, cursor_pixmap);
-	cursor_pixmap = 0;
-
-	XDestroyImage(cursor_image);
-	cursor_image = NULL;
 }
 #endif
 
@@ -581,7 +560,7 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 	}
 
 #ifdef HAVE_XI
-	if(track_cursor)
+	if(can_track_cursor)
 	{
 		if (	(cookie->type == GenericEvent)
 		    &&	(cookie->extension == xi_opcode))
@@ -641,7 +620,7 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 #endif
 
 #ifdef HAVE_XDAMAGE
-	if(use_xdamage)
+	if(damage)
 	{
 		if (ev->type == xdamage_event_base + XDamageNotify)
 		{
@@ -682,6 +661,8 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 void
 x11_set_xi_eventmask(gboolean active)
 {
+	// inspired from: http://keithp.com/blogs/Cursor_tracking/
+
 	XIEventMask evmasks[1];
 	unsigned char mask1[(XI_LASTEVENT + 7)/8];
 	memset(mask1, 0, sizeof(mask1));
@@ -699,68 +680,49 @@ x11_set_xi_eventmask(gboolean active)
 	XISelectEvents(display, root_window, evmasks, 1);
 }
 
-// enable notification of motion events (XI_RawMotion)
-//
-// state:
-// 	track_cursor
-//
-// initialises:
-// 	xi_opcode
-//
-void
-x11_enable_cursor_tracking()
+void x11_init_cursor_tracking()
 {
-	if (track_cursor)
-		return;
-
-	// inspired from: http://keithp.com/blogs/Cursor_tracking/
-	
 	int event, error;
 	if (!XQueryExtension(display, "XInputExtension", &xi_opcode, &event, &error))
 		return;
-	
+
 	int major=2, minor=2;
 	if (XIQueryVersion(display, &major, &minor) != Success)
 		return;
 
-	x11_set_xi_eventmask(TRUE);
+	if ((major > 2) || ((major == 2) && (minor >= 2))) {
+		can_track_cursor = TRUE;
+	}
+}
 
-	track_cursor = TRUE;
+void
+x11_enable_cursor_tracking()
+{
+	if (can_track_cursor) {
+		x11_set_xi_eventmask(TRUE);
+	}
 }
 
 void
 x11_disable_cursor_tracking()
 {
-	if(!track_cursor)
-		return;
-	track_cursor = FALSE;
-
-	x11_set_xi_eventmask(FALSE);
+	if (can_track_cursor) {
+		x11_set_xi_eventmask(FALSE);
+	}
 }
 #endif
 
 #ifdef HAVE_XDAMAGE
-// enable notification of screen updates (XDamageNotify)
-//
-// state:
-// 	use_xdamage
-//
-// initialises:
-// 	damage
-//
 void
-x11_enable_xdamage()
+x11_init_xdamage()
 {
-	if (use_xdamage) {
-		return;
-	}
-
 	if (config.opt_rate > 0) {
 		// user requested fixed refresh rate
 		return;
 	}
 
-	int error_base, major, minor;
+	// detect the Xdamage extension
+	int major=1, minor=0, error_base;
 	if (	   !XDamageQueryExtension(display, &xdamage_event_base, &error_base)
 		|| !XDamageQueryVersion(display, &major, &minor)
 		|| (major<1)
@@ -776,19 +738,20 @@ x11_enable_xdamage()
 		min_refresh_period = 1000 / ((config.opt_limit<0) ? 50 : config.opt_limit); 
 	}
 
-	damage = XDamageCreate(display, root_window, XDamageReportBoundingBox);
+	can_use_xdamage = TRUE;
+}
 
-	use_xdamage = TRUE;
+void
+x11_enable_xdamage()
+{
+	if (can_use_xdamage) {
+		damage = XDamageCreate(display, root_window, XDamageReportBoundingBox);
+	}
 }
 
 void
 x11_disable_xdamage()
 {
-	if (!use_xdamage) {
-		return;
-	}
-	use_xdamage = FALSE;
-
 	if (damage) {
 		XDamageDestroy(display, damage);
 		damage = 0;
@@ -819,7 +782,7 @@ x11_on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   use
 	}
 
 #ifdef HAVE_XDAMAGE
-	if (use_xdamage)
+	if (damage)
 	{
 		if (gdk_rectangle_intersect(&rect, &src_rect, NULL)) {
 			if (window_mapped) {
@@ -884,6 +847,15 @@ x11_init()
 
 #ifdef HAVE_XRANDR
 	x11_init_xrandr();
+#endif
+#ifdef COPY_CURSOR
+	x11_init_copy_cursor();
+#endif
+#ifdef HAVE_XI
+	x11_init_cursor_tracking();
+#endif
+#ifdef HAVE_XDAMAGE
+	x11_init_xdamage();
 #endif
 
 	// atom name
@@ -1084,7 +1056,7 @@ x11_enable()
 	gdk_window_add_filter(NULL, x11_on_x11_event, NULL);
 
 #if HAVE_XDAMAGE && HAVE_XI
-	if (!(use_xdamage && track_cursor))
+	if (!(damage && can_track_cursor))
 #endif
 	{
 		int rate = 25; // default to 25 fps
