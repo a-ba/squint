@@ -21,66 +21,66 @@
 #include <X11/extensions/Xrandr.h>
 #endif
 
-Window root_window = 0;
-GdkRectangle root_window_rect;
-Window window = 0;
-Pixmap pixmap = -1;
-int depth = -1, screen = -1;
-GC gc = NULL;
-GC gc_white = NULL;
-Display* display = NULL;
-gint refresh_timer = 0;
-Atom net_active_window_atom = 0;
+static Window root_window = 0;
+static GdkRectangle root_window_rect;
+static Window window = 0;
+static Pixmap pixmap = -1;
+static int depth = -1, screen = -1;
+static GC gc = NULL;
+static GC gc_white = NULL;
+static Display* display = NULL;
+static gint refresh_timer = 0;
+static Atom net_active_window_atom = 0;
 
-Window active_window = 0;
+static Window active_window = 0;
 
-GdkPoint offset;
-GdkPoint cursor;
+static GdkPoint offset;
+static GdkPoint cursor;
 
 #ifdef HAVE_XI
-gboolean track_cursor = FALSE;
-int xi_opcode = 0;
+static gboolean track_cursor = FALSE;
+static int xi_opcode = 0;
 #endif
 
 #ifdef USE_XDAMAGE
-gboolean use_xdamage = FALSE;
-int window_mapped = 1;
-int xdamage_event_base;
-Damage damage = 0;
-XserverRegion screen_region = 0;
-int min_refresh_period=0;
-Time next_refresh=0;
-gint refresh_timeout=0;
+static gboolean use_xdamage = FALSE;
+static int window_mapped = 1;
+static int xdamage_event_base;
+static Damage damage = 0;
+static XserverRegion screen_region = 0;
+static int min_refresh_period=0;
+static Time next_refresh=0;
+static gint refresh_timeout=0;
 #endif
 
 #ifdef HAVE_XFIXES
-int xfixes_event_base;
+static int xfixes_event_base;
 #endif
 
 #ifdef COPY_CURSOR
 #define CURSOR_SIZE 64
-int copy_cursor = 0;
-Window cursor_window = 0;
-Pixmap cursor_pixmap = 0;
-XImage* cursor_image = NULL;
-Pixmap  cursor_mask_pixmap = 0;
-XImage* cursor_mask_image = NULL;
-GC	cursor_mask_gc = NULL;
-int cursor_xhot=0;
-int cursor_yhot=0;
-uint32_t* cursor_pixels;
-uint8_t*  cursor_mask_pixels;
+static int copy_cursor = 0;
+static Window cursor_window = 0;
+static Pixmap cursor_pixmap = 0;
+static XImage* cursor_image = NULL;
+static Pixmap  cursor_mask_pixmap = 0;
+static XImage* cursor_mask_image = NULL;
+static GC	cursor_mask_gc = NULL;
+static int cursor_xhot=0;
+static int cursor_yhot=0;
+static uint32_t* cursor_pixels;
+static uint8_t*  cursor_mask_pixels;
 #define CURSOR_MASK_SIZE (CURSOR_SIZE*CURSOR_SIZE/8)
 #endif
 
 #ifdef HAVE_XRANDR
-int xrandr_event_base = 0;
+static int xrandr_event_base = 0;
 #endif
 
 
 
 void
-adjust_offset_value(gint* offset, gint src, gint dst, gint cursor)
+x11_adjust_offset_value(gint* offset, gint src, gint dst, gint cursor)
 {
 	if (dst >= src)
 	{
@@ -114,13 +114,13 @@ adjust_offset_value(gint* offset, gint src, gint dst, gint cursor)
 }
 
 void
-fix_offset()
+x11_fix_offset()
 {
 	GdkPoint offset_bak = {offset.x, offset.y};
 
 	// Adjust the offsets
-	adjust_offset_value(&offset.x, src_rect.width,  dst_rect.width,  cursor.x);
-	adjust_offset_value(&offset.y, src_rect.height, dst_rect.height, cursor.y);
+	x11_adjust_offset_value(&offset.x, src_rect.width,  dst_rect.width,  cursor.x);
+	x11_adjust_offset_value(&offset.y, src_rect.height, dst_rect.height, cursor.y);
 	
 	
 	if (memcmp(&offset, &offset_bak, sizeof(offset)))
@@ -142,7 +142,7 @@ fix_offset()
 
 
 void
-refresh_cursor_location(gboolean force)
+x11_refresh_cursor_location(gboolean force)
 {
 	Window root_return, w;
 	int wx, wy;
@@ -200,17 +200,17 @@ refresh_cursor_location(gboolean force)
 		hide();
 	}
 
-	fix_offset();
+	x11_fix_offset();
 }
 
 gboolean
-refresh_image (gpointer data)
+x11_refresh_image (gpointer data)
 {
 #ifdef HAVE_XI
 	if (!track_cursor)
 #endif
 	{
-		refresh_cursor_location(FALSE);
+		x11_refresh_cursor_location(FALSE);
 	}
 
 	XCopyArea (display, root_window, pixmap, gc,
@@ -240,20 +240,22 @@ refresh_image (gpointer data)
 }
 
 #ifdef USE_XDAMAGE
-void try_refresh_image (Time timestamp);
-gboolean _try_refresh_image_timeout (gpointer data)
+void x11_try_refresh_image (Time timestamp);
+
+gboolean 
+x11_try_refresh_image_timeout (gpointer data)
 {
 	refresh_timeout=0;
 
 	if ((Time)data == next_refresh)
 	{
-		try_refresh_image(next_refresh);
+		x11_try_refresh_image(next_refresh);
 	}
 	return FALSE;
 }
 
 void
-try_refresh_image (Time timestamp)
+x11_try_refresh_image (Time timestamp)
 {
 	if ((timestamp >= next_refresh) || (timestamp < next_refresh - 1000)) {
 		if (refresh_timeout) {
@@ -261,10 +263,10 @@ try_refresh_image (Time timestamp)
 			refresh_timeout=0;
 		}
 		next_refresh = timestamp + min_refresh_period;
-		refresh_image(NULL);
+		x11_refresh_image(NULL);
 
 	} else if (!refresh_timeout) {
-		refresh_timeout = g_timeout_add (next_refresh - timestamp, _try_refresh_image_timeout, (gpointer)next_refresh);
+		refresh_timeout = g_timeout_add (next_refresh - timestamp, x11_try_refresh_image_timeout, (gpointer)next_refresh);
 	}
 }
 #endif
@@ -273,7 +275,7 @@ try_refresh_image (Time timestamp)
 
 #ifdef COPY_CURSOR
 void
-refresh_cursor_image()
+x11_refresh_cursor_image()
 {
 	XFixesCursorImage* img = XFixesGetCursorImage (display);
 	if (!img)
@@ -339,7 +341,7 @@ refresh_cursor_image()
 // 	cursor_window
 //
 void
-enable_copy_cursor()
+x11_enable_copy_cursor()
 {
 	if (copy_cursor) {
 		return;
@@ -407,9 +409,9 @@ enable_copy_cursor()
 				CWBackPixmap, &attr);
 
 	// refresh the cursor
-	refresh_cursor_image();
+	x11_refresh_cursor_image();
 
-	refresh_cursor_location(TRUE);
+	x11_refresh_cursor_location(TRUE);
 
 	// request cursor change notifications
 	XFixesSelectCursorInput(display, gdk_x11_window_get_xid(gdkwin), XFixesCursorNotify);
@@ -418,7 +420,7 @@ enable_copy_cursor()
 }
 
 void
-disable_copy_cursor()
+x11_disable_copy_cursor()
 {
 	if (!copy_cursor) {
 		return;
@@ -444,7 +446,7 @@ disable_copy_cursor()
 
 
 void
-show_active_window()
+x11_show_active_window()
 {
 	if (!active_window)
 		return;
@@ -465,7 +467,7 @@ show_active_window()
 }
 
 gboolean
-get_window_geometry(Window w, GdkRectangle* r)
+x11_get_window_geometry(Window w, GdkRectangle* r)
 {
 	gboolean result;
 	Window root;
@@ -492,7 +494,7 @@ get_window_geometry(Window w, GdkRectangle* r)
 }
 
 void
-refresh_active_window_geometry()
+x11_refresh_active_window_geometry()
 {
 	if(!active_window)
 		return;
@@ -517,14 +519,14 @@ refresh_active_window_geometry()
 		}
 		
 		// get its coordinates
-		get_window_geometry(w, &active_window_rect);
+		x11_get_window_geometry(w, &active_window_rect);
 	}
 err:	
 	gdk_x11_display_error_trap_pop_ignored(gdisplay);
 }
 
 Window
-get_active_window()
+x11_get_active_window()
 {
 	Window result = 0;
 	Window* w;
@@ -545,7 +547,7 @@ get_active_window()
 }
 
 void
-active_window_stop_monitoring()
+x11_active_window_stop_monitoring()
 {
 	if (!gdk_x11_window_lookup_for_display(gdisplay, active_window))
 	{
@@ -563,16 +565,16 @@ active_window_stop_monitoring()
 }
 
 void
-active_window_start_monitoring()
+x11_active_window_start_monitoring()
 {
 	if (active_window)
-		active_window_stop_monitoring();
+		x11_active_window_stop_monitoring();
 
-	active_window = get_active_window();
+	active_window = x11_get_active_window();
 	if (!active_window)
 		return;
 
-	refresh_active_window_geometry();
+	x11_refresh_active_window_geometry();
 	if (!memcmp(&active_window_rect, &root_window_rect, sizeof(GdkRectangle))) {
 		// same geometry as the root window
 		// -> ignore it
@@ -600,7 +602,7 @@ active_window_start_monitoring()
 }
 
 GdkFilterReturn
-on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
+x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 {
 	XEvent* ev = (XEvent*)xevent;
 	XGenericEventCookie *cookie = &ev->xcookie;
@@ -612,8 +614,8 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		if ((pn_ev->window == root_window) && (pn_ev->atom == net_active_window_atom))
 		{
 			// property _NET_ACTIVE_WINDOW was changed
-			active_window_start_monitoring();
-			show_active_window();
+			x11_active_window_start_monitoring();
+			x11_show_active_window();
 			return GDK_FILTER_REMOVE;
 		}
 		
@@ -624,7 +626,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		XConfigureEvent* c_ev = (XConfigureEvent*) ev;
 		if (c_ev->window == active_window)
 		{
-			refresh_active_window_geometry();
+			x11_refresh_active_window_geometry();
 			return GDK_FILTER_CONTINUE;
 		}
 	}
@@ -639,13 +641,13 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 			{
 			case XI_RawMotion:
 				// cursor was moved
-				refresh_cursor_location(FALSE);
+				x11_refresh_cursor_location(FALSE);
 #ifdef USE_XDAMAGE
 #ifdef COPY_CURSOR
 				if(!copy_cursor)
 #endif
 				if(use_xdamage) {
-					refresh_image(NULL);
+					x11_refresh_image(NULL);
 				}
 #endif
 				return GDK_FILTER_REMOVE;
@@ -677,7 +679,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 						}
 					}
 				
-					show_active_window();
+					x11_show_active_window();
 					return GDK_FILTER_REMOVE;
 				}
 			}
@@ -689,7 +691,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 	if(copy_cursor)
 	{
 		if (ev->type == xfixes_event_base + XFixesCursorNotify) {
-			refresh_cursor_image();
+			x11_refresh_cursor_image();
 
 			return GDK_FILTER_REMOVE;
 		}
@@ -715,7 +717,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 
 				if (gdk_rectangle_intersect(&damage_rect, &src_rect, NULL))
 				{
-					try_refresh_image(xd_ev->timestamp);
+					x11_try_refresh_image(xd_ev->timestamp);
 				}
 			}
 			XDamageSubtract(display, damage, 0, 0);
@@ -736,7 +738,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 
 #ifdef HAVE_XI
 void
-set_xi_eventmask(gboolean active)
+x11_set_xi_eventmask(gboolean active)
 {
 	XIEventMask evmasks[1];
 	unsigned char mask1[(XI_LASTEVENT + 7)/8];
@@ -764,7 +766,7 @@ set_xi_eventmask(gboolean active)
 // 	xi_opcode
 //
 void
-enable_cursor_tracking()
+x11_enable_cursor_tracking()
 {
 	if (track_cursor)
 		return;
@@ -779,18 +781,18 @@ enable_cursor_tracking()
 	if (XIQueryVersion(display, &major, &minor) != Success)
 		return;
 
-	set_xi_eventmask(TRUE);
+	x11_set_xi_eventmask(TRUE);
 
 	track_cursor = TRUE;
 }
 
 void
-disable_cursor_tracking()
+x11_disable_cursor_tracking()
 {
 	if(!track_cursor)
 		return;
 
-	set_xi_eventmask(FALSE);
+	x11_set_xi_eventmask(FALSE);
 
 	track_cursor = FALSE;
 }
@@ -807,7 +809,7 @@ disable_cursor_tracking()
 // 	screen_region
 //
 void
-enable_xdamage()
+x11_enable_xdamage()
 {
 	if (use_xdamage) {
 		return;
@@ -851,7 +853,7 @@ enable_xdamage()
 }
 
 void
-disable_xdamage()
+x11_disable_xdamage()
 {
 	if (!use_xdamage) {
 		return;
@@ -873,7 +875,7 @@ disable_xdamage()
 
 
 gboolean
-on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
+x11_on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_data)
 {
 	GdkEventConfigure* e = (GdkEventConfigure*) event;
 	GdkRectangle rect;
@@ -888,7 +890,7 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 
 	if(!fullscreen) {
 		memcpy(&dst_rect, &rect, sizeof(rect));
-		fix_offset();
+		x11_fix_offset();
 	}
 
 #ifdef USE_XDAMAGE
@@ -922,7 +924,7 @@ on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   user_da
 
 #ifdef HAVE_XRANDR
 void
-init_xrandr()
+x11_init_xrandr()
 {
 	int error;
 	if (!XRRQueryExtension(display, &xrandr_event_base, &error)) {
@@ -966,7 +968,7 @@ x11_init()
 	}
 
 #ifdef HAVE_XRANDR
-	init_xrandr();
+	x11_init_xrandr();
 #endif
 
 	// atom name
@@ -996,7 +998,7 @@ x11_enable_window()
 	if (!fullscreen) {
 		// register events
 		// - window moved/resized
-		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (on_window_configure_event), NULL);
+		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (x11_on_window_configure_event), NULL);
 	}
 
 	// create the pixmap
@@ -1017,7 +1019,7 @@ x11_enable_window()
 	}
 
 	// force refreshing the cursor position
-	refresh_cursor_location(TRUE);
+	x11_refresh_cursor_location(TRUE);
 }
 
 void
@@ -1032,7 +1034,7 @@ x11_disable_window()
 
 
 void
-enable_focus_tracking()
+x11_enable_focus_tracking()
 {
 	memset(&active_window_rect, 0, sizeof(active_window_rect));
 
@@ -1042,7 +1044,7 @@ enable_focus_tracking()
 }
 
 void
-disable_focus_tracking()
+x11_disable_focus_tracking()
 {
 	XSetWindowAttributes attr;
 	attr.event_mask = 0;
@@ -1052,27 +1054,27 @@ disable_focus_tracking()
 void
 x11_enable()
 {
-	enable_focus_tracking();
+	x11_enable_focus_tracking();
 	
 #ifdef HAVE_XI
-	enable_cursor_tracking();
+	x11_enable_cursor_tracking();
 #endif
 
 #ifdef COPY_CURSOR
-	enable_copy_cursor();
+	x11_enable_copy_cursor();
 #endif
 
 #ifdef USE_XDAMAGE
-	enable_xdamage();
+	x11_enable_xdamage();
 #endif
 
 	XFlush (display);
 
-	get_window_geometry(root_window, &root_window_rect);
-	active_window_start_monitoring();
+	x11_get_window_geometry(root_window, &root_window_rect);
+	x11_active_window_start_monitoring();
 
 	// catch all X11 events
-	gdk_window_add_filter(NULL, on_x11_event, NULL);
+	gdk_window_add_filter(NULL, x11_on_x11_event, NULL);
 
 #if USE_XDAMAGE && HAVE_XI
 	if (!(use_xdamage && track_cursor))
@@ -1085,7 +1087,7 @@ x11_enable()
 			rate = config.opt_limit;
 		}
 
-		refresh_timer = g_timeout_add (1000/rate, &refresh_image, NULL);
+		refresh_timer = g_timeout_add (1000/rate, &x11_refresh_image, NULL);
 	}
 
 	// Redraw the window
@@ -1106,20 +1108,20 @@ x11_disable()
 		refresh_timer = 0;
 	}
 
-	gdk_window_remove_filter(NULL, on_x11_event, NULL);
+	gdk_window_remove_filter(NULL, x11_on_x11_event, NULL);
 
-	active_window_stop_monitoring();
+	x11_active_window_stop_monitoring();
 
 #ifdef HAVE_XI
-	disable_cursor_tracking();
+	x11_disable_cursor_tracking();
 #endif
 
 #ifdef COPY_CURSOR
-	disable_copy_cursor();
+	x11_disable_copy_cursor();
 #endif
 
 #ifdef USE_XDAMAGE
-	disable_xdamage();
+	x11_disable_xdamage();
 #endif
-	disable_focus_tracking();
+	x11_disable_focus_tracking();
 }
