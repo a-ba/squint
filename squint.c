@@ -128,7 +128,6 @@ const char* css = "window { background-color: black; }";
 void
 show_about_dialog()
 {
-	static const char* authors[] = { "Anthony Baire", NULL };
 	gtk_show_about_dialog(
 		NULL,
 		"copyright",	"© 2013, 2014 Anthony Baire",
@@ -504,7 +503,8 @@ void
 refresh_cursor_location(gboolean force)
 {
 	Window root_return, w;
-	int wx, wy, mask;
+	int wx, wy;
+	unsigned int mask;
 	GdkPoint c;
 	XQueryPointer(display, root_window, &root_return, &w,
 			&c.x, &c.y, &wx, &wy, &mask);
@@ -564,9 +564,6 @@ refresh_cursor_location(gboolean force)
 gboolean
 refresh_image (gpointer data)
 {
-	int code;
-	int inside_rect=0;
-
 #ifdef HAVE_XI
 	if (!track_cursor)
 #endif
@@ -865,8 +862,6 @@ refresh_active_window_geometry()
 		Window w = active_window;
 		Window root, parent, *children;
 		unsigned int nchildren;
-		int x, y;
-		unsigned int width, height, border_width, depth;
 
 		// identify the top-level window
 		parent = w;
@@ -1017,7 +1012,7 @@ on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 				{
 					XIRawEvent* xi_ev = (XIRawEvent*) cookie->data;
 					GdkKeymap* km = gdk_keymap_get_for_display(gdisplay);
-					guint keyval, nentries;
+					guint keyval;
 
 					if(gdk_keymap_translate_keyboard_state(km, xi_ev->detail,
 							0, // FIXME: do we need the modifier?
@@ -1485,7 +1480,7 @@ select_any_monitor_but(GdkDisplay* dsp, GdkMonitor** mon, GdkRectangle* rect, co
 gboolean
 select_monitors()
 {
-	int n, i;
+	int n;
 	unselect_monitor(&src_monitor, &src_rect);
 	unselect_monitor(&dst_monitor, &dst_rect);
 
