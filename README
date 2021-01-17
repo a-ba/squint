@@ -13,7 +13,7 @@ DEPENDENCIES
 	
 	Required:
 		- gtk+ (>=3.0)
-		- python2 (>= 2.4)
+		- meson
 
 	Optional (but recommended):
 		- libxdamage
@@ -27,20 +27,22 @@ DEPENDENCIES
 
 INSTALLATION
 
-	The build script is based on *waf*. To build squint, you need to run:
+	The build script is based on *meson*. To build squint (assuming you are
+	using the ninja backend), you need to run:
 
-		./waf configure
-		./waf
+		meson setup builddir
+		ninja -C builddir
 	
-	Then, as root:
+	Then install it with:
 
-		./waf install
+		ninja -C builddir install
 
-	By default squint is installed into /usr/local. You can configure this
-	with the --prefix option when running "./waf configure"
+	By default squint is installed into /usr/local. You use a different
+	path by running "meson configure builddir --prefix=PATH" before the
+	build.
 
-	For more details run "./waf --help" or check the documentation at:
-	http://docs.waf.googlecode.com/git/book_17/single.html
+	For more details, check the meson user manual at:
+	https://mesonbuild.com/Running-Meson.html
 	
 USAGE
 	See the man page
