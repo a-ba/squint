@@ -58,7 +58,7 @@ static int xfixes_event_base;
 #endif
 
 #ifdef COPY_CURSOR
-#define CURSOR_SIZE 64
+#define CURSOR_SIZE 32
 static int copy_cursor = 0;
 static Window cursor_window = 0;
 static Pixmap cursor_pixmap = 0;
@@ -366,7 +366,7 @@ x11_enable_copy_cursor()
 	// create an image for storing the cursor
 	cursor_pixels = (uint32_t*) malloc(sizeof(*cursor_pixels)*CURSOR_SIZE*CURSOR_SIZE);
 	cursor_image = XCreateImage (display, NULL, 24, ZPixmap, 0, (char*)cursor_pixels,
-				CURSOR_SIZE, CURSOR_SIZE, 32, 256);
+				CURSOR_SIZE, CURSOR_SIZE, 32, 4*CURSOR_SIZE);
 	if (!cursor_image) {
 		squint_error("XCreateImage() failed");
 		return;
