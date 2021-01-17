@@ -43,8 +43,6 @@ static struct
 void refresh_app_indicator();
 #endif
 
-static const char* css = "window { background-color: black; }";
-
 gboolean squint_enable();
 
 void
@@ -388,20 +386,6 @@ init()
 			g_clear_error (&err);
 		}
 		gicon = g_file_icon_new(g_file_new_for_path(icon_path));
-
-		// load the css
-		GtkCssProvider* css_provider = gtk_css_provider_new();
-		gtk_css_provider_load_from_data(css_provider, css, strlen(css), &err);
-		if (err) {
-			squint_error(err->message);
-			g_clear_error (&err);
-		} else {
-			gtk_style_context_add_provider_for_screen(
-					gdk_display_get_default_screen(gdisplay),
-					GTK_STYLE_PROVIDER(css_provider),
-					GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-		}
-
 	}
 	cursor_icon = gdk_cursor_new_for_display(gdisplay, GDK_X_CURSOR);
 

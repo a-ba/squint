@@ -977,6 +977,13 @@ x11_init()
 	return TRUE;
 }
 
+gboolean
+x11_on_squint_window_draw(GtkWidget* widget, void* cairo_ctx, gpointer user_data)
+{
+	// do not propagate the event to the GtkWindow
+	return TRUE;
+}
+
 //
 // Prepare the window to host the duplicated screen (create the pixmap, subwindow)
 //
@@ -1001,6 +1008,13 @@ x11_enable_window()
 		g_signal_connect (gtkwin, "configure-event", G_CALLBACK (x11_on_window_configure_event), NULL);
 	}
 
+	// intercept the 'draw' event of the squint window to prevent any rendering by gtk
+	g_signal_connect(gtkwin, "draw", G_CALLBACK(x11_on_squint_window_draw), NULL);
+
+	// have the main window painted black by X11
+	Window squint_window = gdk_x11_window_get_xid(gdkwin);
+	XSetWindowBackground(display, squint_window, 0);
+
 	// create the pixmap
 	pixmap = XCreatePixmap (display, root_window, src_rect.width, src_rect.height, depth);
 	
@@ -1008,8 +1022,7 @@ x11_enable_window()
 	{
 		XSetWindowAttributes attr;
 		attr.background_pixmap = pixmap;
-		window = XCreateWindow (display,
-					gdk_x11_window_get_xid(gdkwin),
+		window = XCreateWindow (display, squint_window,
 					offset.x, offset.y,
 					src_rect.width, src_rect.height,
 					0, CopyFromParent,
