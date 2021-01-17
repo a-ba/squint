@@ -185,9 +185,6 @@ x11_refresh_cursor_location(gboolean force)
 			XMoveWindow (display, cursor_window,
 					cursor.x - cursor_xhot + offset.x,
 					cursor.y - cursor_yhot + offset.y);
-
-			// force redrawing the window
-			XClearWindow(display, cursor_window);
 		}
 	}
 #endif
