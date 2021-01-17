@@ -296,16 +296,16 @@ x11_refresh_cursor_image()
 
 	// copy the cursor mask
 	memset(cursor_mask_pixels, 0, CURSOR_MASK_SIZE);
-	for(x=0 ; x<width ; x++)
+	for(y=0 ; y<height ; y++)
 	{
-		for(y=0 ; y<height ; y++)
+		for(x=0 ; x<width ; x++)
 		{
-			if(img->pixels[y*img->width + x] >> 24)
+			uint8_t alpha = img->pixels[y*img->width + x] >> 24;
+			if (alpha > 0xb0)
 			{
 				cursor_mask_pixels[y*(CURSOR_SIZE/8) + (x/8)] |= 1 << (x % 8);
 			}
 		}
-
 	}
 
 	// upload the image & mask
