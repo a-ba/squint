@@ -54,8 +54,8 @@ show_about_dialog()
 		"license-type",	GTK_LICENSE_GPL_3_0,
 		"logo",		icon,
 		"program-name",	APPNAME " " VERSION,
-		"website",	"https://bitbucket.org/a_ba/squint",
-		"website-label","https://bitbucket.org/a_ba/squint",
+		"website",	"https://github.com/a-ba/squint",
+		"website-label","https://github.com/a-ba/squint",
 		NULL
 	);
 }
