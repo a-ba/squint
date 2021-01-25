@@ -49,12 +49,13 @@ static int xi_opcode = 0;
 
 #ifdef HAVE_XDAMAGE
 static gboolean can_use_xdamage = FALSE;
-static int window_mapped = 1;
 static int xdamage_event_base;
 static Damage damage = 0;
 static int min_refresh_period=0;
 static Time next_refresh=0;
 static gint refresh_timeout=0;
+
+gboolean x11_compute_damaged_rect(GdkRectangle* rect);
 #endif
 
 #ifdef COPY_CURSOR
@@ -177,7 +178,7 @@ x11_refresh_cursor_location(gboolean force)
 }
 
 gboolean
-x11_refresh_image (gpointer data)
+x11_refresh_image(const GdkRectangle* damaged_rect)
 {
 #ifdef HAVE_XI
 	if (!can_track_cursor)
@@ -186,17 +187,21 @@ x11_refresh_image (gpointer data)
 		x11_refresh_cursor_location(FALSE);
 	}
 
+	// location of the damaged area relative to the source rect
+	int x = damaged_rect->x - src_rect.x;
+	int y = damaged_rect->y - src_rect.y;
+
 	x11_clear_cursor();
 
 	XCopyArea (display, root_window, pixmap, gc,
-					src_rect.x, src_rect.y,
-					src_rect.width, src_rect.height,
-					0, 0);
+			damaged_rect->x,     damaged_rect->y,
+			damaged_rect->width , damaged_rect->height,
+			x, y);
 
 	x11_draw_cursor();
 
-	// redraw the whole window
-	XClearWindow(display, window);
+	// redraw the damaged area
+	XClearArea(display, window, x, y, damaged_rect->width, damaged_rect->height, FALSE);
 
 	XFlush (display);
 
@@ -204,7 +209,7 @@ x11_refresh_image (gpointer data)
 }
 
 #ifdef HAVE_XDAMAGE
-void x11_try_refresh_image (Time timestamp);
+void x11_try_refresh_image (Time timestamp, const GdkRectangle* damaged_rect);
 
 gboolean 
 x11_try_refresh_image_timeout (gpointer data)
@@ -213,21 +218,33 @@ x11_try_refresh_image_timeout (gpointer data)
 
 	if ((Time)data == next_refresh)
 	{
-		x11_try_refresh_image(next_refresh);
+		x11_try_refresh_image(next_refresh, NULL);
 	}
 	return FALSE;
 }
 
 void
-x11_try_refresh_image (Time timestamp)
+x11_try_refresh_image (Time timestamp, const GdkRectangle* damaged_rect)
 {
+	static GdkRectangle acc = { 0, 0, 0, 0 };
+	if (damaged_rect != NULL) {
+		if (acc.width == 0) {
+			acc = *damaged_rect;
+		} else {
+			gdk_rectangle_union(damaged_rect, &acc, &acc);
+		}
+	}
+
 	if ((timestamp >= next_refresh) || (timestamp < next_refresh - 1000)) {
 		if (refresh_timeout) {
 			g_source_remove(refresh_timeout);
 			refresh_timeout=0;
 		}
 		next_refresh = timestamp + min_refresh_period;
-		x11_refresh_image(NULL);
+		if (acc.width) {
+			x11_refresh_image(&acc);
+			acc.width = 0;
+		}
 
 	} else if (!refresh_timeout) {
 		refresh_timeout = g_timeout_add (next_refresh - timestamp, x11_try_refresh_image_timeout, (gpointer)next_refresh);
@@ -624,23 +641,30 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 		if (ev->type == xdamage_event_base + XDamageNotify)
 		{
 			XDamageNotifyEvent* xd_ev = (XDamageNotifyEvent*) ev;
+			static GdkRectangle accumulated_damage = { 0, 0, 0, 0 };
 
-			// we do not refresh the window in case it overlaps with
-			// the duplicated screen (to avoid any amplification)
-			if (!xd_ev->more && !gdk_rectangle_intersect(&src_rect, &dst_rect, NULL)) {
-				// check if damage intersects with the screen
-				GdkRectangle damage_rect;
-				damage_rect.x = xd_ev->area.x;
-				damage_rect.y = xd_ev->area.y;
-				damage_rect.width  = xd_ev->area.width;
-				damage_rect.height = xd_ev->area.height;
+			// get the damaged area
+			GdkRectangle rect = {
+				xd_ev->area.x,     xd_ev->area.y,
+				xd_ev->area.width, xd_ev->area.height
+			};
 
-				if (gdk_rectangle_intersect(&damage_rect, &src_rect, NULL))
-				{
-					x11_try_refresh_image(xd_ev->timestamp);
+			if (x11_compute_damaged_rect(&rect)) {
+				// source screen damaged
+				if (accumulated_damage.width == 0) {
+					accumulated_damage = rect;
+				} else {
+					gdk_rectangle_union(&rect,
+							&accumulated_damage,
+							&accumulated_damage);
 				}
 			}
-			XDamageSubtract(display, damage, 0, 0);
+
+			if (!xd_ev->more && accumulated_damage.width)
+			{
+				x11_try_refresh_image(xd_ev->timestamp, &accumulated_damage);
+				accumulated_damage.width = 0;
+			}
 		}
 	}
 #endif
@@ -744,7 +768,7 @@ void
 x11_enable_xdamage()
 {
 	if (can_use_xdamage) {
-		damage = XDamageCreate(display, root_window, XDamageReportBoundingBox);
+		damage = XDamageCreate(display, root_window, XDamageReportRawRectangles);
 	}
 }
 
@@ -754,6 +778,28 @@ x11_disable_xdamage()
 	if (damage) {
 		XDamageDestroy(display, damage);
 		damage = 0;
+	}
+}
+
+gboolean
+x11_compute_damaged_rect(GdkRectangle* rect)
+{
+	// intersect the rectangle with src_rect
+	if (!gdk_rectangle_intersect(&src_rect, rect, rect)) {
+		// src_rect not damaged
+		return FALSE;
+	}
+
+	// does it intersect with the dst_rect?
+	if (gdk_rectangle_intersect(rect, &dst_rect, NULL)) {
+		// part of the damages are inside dst_rect
+		// return TRUE only if we have other damages outside dst_rect
+		GdkRectangle r;
+		gdk_rectangle_union(rect,   &dst_rect, &r);
+		return !gdk_rectangle_equal(&dst_rect, &r);
+	} else {
+		// all damages outside dst_rect
+		return TRUE;
 	}
 }
 #endif
@@ -779,23 +825,6 @@ x11_on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   use
 			XClearWindow(display, window);
 		}
 	}
-
-#ifdef HAVE_XDAMAGE
-	if (damage)
-	{
-		if (gdk_rectangle_intersect(&rect, &src_rect, NULL)) {
-			if (window_mapped) {
-				window_mapped = 0;
-				XUnmapWindow(display, window);
-			}
-		} else {
-			if (!window_mapped) {
-				window_mapped = 1;
-				XMapWindow(display, window);
-			}
-		}
-	}
-#endif
 	return TRUE;
 }
 
@@ -1100,7 +1129,8 @@ x11_enable()
 			rate = config.opt_limit;
 		}
 
-		refresh_timer = g_timeout_add (1000/rate, &x11_refresh_image, NULL);
+		refresh_timer = g_timeout_add (1000/rate,
+				G_SOURCE_FUNC(&x11_refresh_image), &src_rect);
 	}
 
 	// Redraw the window
