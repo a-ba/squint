@@ -14,7 +14,7 @@
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/Xrender.h>
 #endif
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 #include <X11/extensions/Xdamage.h>
 #endif
 #ifdef HAVE_XRANDR
@@ -47,12 +47,11 @@ static gboolean track_cursor = FALSE;
 static int xi_opcode = 0;
 #endif
 
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 static gboolean use_xdamage = FALSE;
 static int window_mapped = 1;
 static int xdamage_event_base;
 static Damage damage = 0;
-static XserverRegion screen_region = 0;
 static int min_refresh_period=0;
 static Time next_refresh=0;
 static gint refresh_timeout=0;
@@ -205,7 +204,7 @@ x11_refresh_image (gpointer data)
 	return TRUE;
 }
 
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 void x11_try_refresh_image (Time timestamp);
 
 gboolean 
@@ -641,7 +640,7 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 	}
 #endif
 
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 	if(use_xdamage)
 	{
 		if (ev->type == xdamage_event_base + XDamageNotify)
@@ -740,7 +739,7 @@ x11_disable_cursor_tracking()
 }
 #endif
 
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 // enable notification of screen updates (XDamageNotify)
 //
 // state:
@@ -748,7 +747,6 @@ x11_disable_cursor_tracking()
 //
 // initialises:
 // 	damage
-// 	screen_region
 //
 void
 x11_enable_xdamage()
@@ -763,10 +761,7 @@ x11_enable_xdamage()
 	}
 
 	int error_base, major, minor;
-	if (	   !XFixesQueryExtension(display, &xfixes_event_base, &error_base)
-		|| !XFixesQueryVersion(display, &major, &minor)
-		|| (major<2)
-		|| !XDamageQueryExtension(display, &xdamage_event_base, &error_base)
+	if (	   !XDamageQueryExtension(display, &xdamage_event_base, &error_base)
 		|| !XDamageQueryVersion(display, &major, &minor)
 		|| (major<1)
 	) {
@@ -783,14 +778,6 @@ x11_enable_xdamage()
 
 	damage = XDamageCreate(display, root_window, XDamageReportBoundingBox);
 
-	XRectangle r;
-	r.x = src_rect.x;
-	r.y = src_rect.y;
-	r.width = src_rect.width;
-	r.height = src_rect.height;
-
-	screen_region = XFixesCreateRegion(display, &r, 1);
-
 	use_xdamage = TRUE;
 }
 
@@ -801,11 +788,6 @@ x11_disable_xdamage()
 		return;
 	}
 	use_xdamage = FALSE;
-
-	if (screen_region) {
-		XFixesDestroyRegion(display, screen_region);
-		screen_region = 0;
-	}
 
 	if (damage) {
 		XDamageDestroy(display, damage);
@@ -836,7 +818,7 @@ x11_on_window_configure_event(GtkWidget *widget, GdkEvent *event, gpointer   use
 		}
 	}
 
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 	if (use_xdamage)
 	{
 		if (gdk_rectangle_intersect(&rect, &src_rect, NULL)) {
@@ -1089,7 +1071,7 @@ x11_enable()
 	x11_enable_copy_cursor();
 #endif
 
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 	x11_enable_xdamage();
 #endif
 
@@ -1101,7 +1083,7 @@ x11_enable()
 	// catch all X11 events
 	gdk_window_add_filter(NULL, x11_on_x11_event, NULL);
 
-#if USE_XDAMAGE && HAVE_XI
+#if HAVE_XDAMAGE && HAVE_XI
 	if (!(use_xdamage && track_cursor))
 #endif
 	{
@@ -1122,7 +1104,7 @@ x11_enable()
 void
 x11_disable()
 {
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 	if (refresh_timeout) {
 		g_source_remove(refresh_timeout);
 		refresh_timeout = 0;
@@ -1145,7 +1127,7 @@ x11_disable()
 	x11_disable_copy_cursor();
 #endif
 
-#ifdef USE_XDAMAGE
+#ifdef HAVE_XDAMAGE
 	x11_disable_xdamage();
 #endif
 	x11_disable_focus_tracking();

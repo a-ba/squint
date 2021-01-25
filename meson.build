@@ -28,10 +28,6 @@ foreach d: [
 	endif
 endforeach
 
-if cfg.has('HAVE_XFIXES') and cfg.has('HAVE_XDAMAGE')
-	cfg.set('USE_XDAMAGE', 1)
-endif
-
 if cfg.has('HAVE_XFIXES') and cfg.has('HAVE_XRENDER')
 	cfg.set('COPY_CURSOR', 1)
 endif
