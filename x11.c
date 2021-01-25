@@ -78,6 +78,8 @@ static uint32_t* cursor_pixels;
 static int xrandr_event_base = 0;
 #endif
 
+gboolean x11_draw_cursor();
+gboolean x11_clear_cursor();
 void x11_redraw_cursor(gboolean do_clear);
 
 
@@ -184,14 +186,14 @@ x11_refresh_image (gpointer data)
 		x11_refresh_cursor_location(FALSE);
 	}
 
+	x11_clear_cursor();
+
 	XCopyArea (display, root_window, pixmap, gc,
 					src_rect.x, src_rect.y,
 					src_rect.width, src_rect.height,
 					0, 0);
 
-	// invalidate the backup_pixmap and redraw the cursor
-	backup.x = -CURSOR_SIZE;
-	x11_redraw_cursor(FALSE);
+	x11_draw_cursor();
 
 	// redraw the whole window
 	XClearWindow(display, window);
@@ -868,12 +870,10 @@ x11_on_squint_window_draw(GtkWidget* widget, void* cairo_ctx, gpointer user_data
 	return TRUE;
 }
 
-void
-x11_redraw_cursor(gboolean do_clear)
+// erase the previous cursor (if any)
+gboolean
+x11_clear_cursor()
 {
-	GdkPoint clear = backup;
-
-	// erase the previous cursor (if any)
 	if (backup.x != -CURSOR_SIZE)
 	{
 		XCopyArea(display, backup_pixmap, pixmap, gc,
@@ -881,9 +881,16 @@ x11_redraw_cursor(gboolean do_clear)
 				CURSOR_SIZE, CURSOR_SIZE,
 				backup.x, backup.y);
 		backup.x = -CURSOR_SIZE;
+		return TRUE;
+	} else {
+		return FALSE;
 	}
+}
 
-	// draw the new cursor (if on screen)
+// draw the new cursor (if on screen)
+gboolean
+x11_draw_cursor()
+{
 	if (cursor.x >= 0)
 	{
 #ifdef COPY_CURSOR
@@ -924,15 +931,45 @@ x11_redraw_cursor(gboolean do_clear)
 					cursor.x, cursor.y+len);
 
 		}
-		if (do_clear) {
-			XClearArea(display, window, backup.x, backup.y,
-					CURSOR_SIZE, CURSOR_SIZE, FALSE);
-		}
+		return TRUE;
+	} else {
+		return FALSE;
 	}
-	// redraw the erased area
-	// (do it after drawing the new cursor to avoid flickering)
-	if (do_clear && (clear.x != -CURSOR_SIZE)) {
-		XClearArea(display, window, clear.x, clear.y, CURSOR_SIZE, CURSOR_SIZE, FALSE);
+}
+
+void
+x11_redraw_cursor(gboolean clear_window)
+{
+	int cleared_x = backup.x;
+	int cleared_y = backup.y;
+
+	gboolean cleared = x11_clear_cursor();
+	gboolean drawn   = x11_draw_cursor();
+
+	if (clear_window) {
+		GdkRectangle rect = {0, 0, CURSOR_SIZE, CURSOR_SIZE };
+		if (drawn && cleared) {
+			rect.x = MIN(backup.x, cleared_x);
+			rect.y = MIN(backup.y, cleared_y);
+			rect.width  += ABS(backup.x - cleared_x);
+			rect.height += ABS(backup.y - cleared_y);
+		}
+		else if (drawn)
+		{
+			rect.x = backup.x;
+			rect.y = backup.y;
+		}
+		else if (cleared)
+		{
+			rect.x = cleared_x;
+			rect.y = cleared_y;
+		}
+		else
+		{
+			return;
+		}
+		XClearArea(display, window, rect.x, rect.y,
+				rect.width, rect.height, FALSE);
 	}
 }
 
