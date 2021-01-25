@@ -316,8 +316,7 @@ init_app_indicator()
 	app_indicator = app_indicator_new_with_path("squint", "",
 			APP_INDICATOR_CATEGORY_APPLICATION_STATUS,
 			PREFIX "/share/squint");
-	app_indicator_set_icon_full(app_indicator, "squint-disabled", "squint disabled");
-	app_indicator_set_attention_icon_full(app_indicator, "squint", "squint enabled");
+	app_indicator_set_status(app_indicator, APP_INDICATOR_STATUS_ACTIVE);
 	app_indicator_set_secondary_activate_target(app_indicator, enabled_item);
 
 	g_object_ref(menu.shell);
@@ -346,9 +345,11 @@ refresh_app_indicator()
 		}
 	}
 
-	app_indicator_set_status(app_indicator, enabled
-			? APP_INDICATOR_STATUS_ATTENTION
-			: APP_INDICATOR_STATUS_ACTIVE);
+	if (enabled) {
+		app_indicator_set_icon_full(app_indicator, "squint",          "squint enabled");
+	} else {
+		app_indicator_set_icon_full(app_indicator, "squint-disabled", "squint disabled");
+	}
 
 	menu.update_index = 0;
 	gtk_container_foreach(GTK_CONTAINER(menu.shell), each_menu_item, NULL);
