@@ -57,13 +57,10 @@ static Time next_refresh=0;
 static gint refresh_timeout=0;
 #endif
 
-#ifdef HAVE_XFIXES
-static int xfixes_event_base;
-#endif
-
 #ifdef COPY_CURSOR
 #undef  CURSOR_SIZE
 #define CURSOR_SIZE 32
+static int xfixes_event_base;
 static int copy_cursor = 0;
 static Pixmap  cursor_pixmap = 0;
 static Picture cursor_picture = 0;
@@ -533,8 +530,6 @@ GdkFilterReturn
 x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 {
 	XEvent* ev = (XEvent*)xevent;
-	XGenericEventCookie *cookie = &ev->xcookie;
-
 
 	if (ev->type == PropertyNotify)
 	{
@@ -562,6 +557,8 @@ x11_on_x11_event (GdkXEvent *xevent, GdkEvent *event, gpointer data)
 #ifdef HAVE_XI
 	if(can_track_cursor)
 	{
+		XGenericEventCookie *cookie = &ev->xcookie;
+
 		if (	(cookie->type == GenericEvent)
 		    &&	(cookie->extension == xi_opcode))
 		{
