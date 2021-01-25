@@ -1,3 +1,27 @@
+Version 0.8.0	29/01/2021
+
+Improvements
+	- improved cursor rendering
+	  (the 8-bit alpha channel is now fully handled)
+	- optimisation: redraw only the damaged part of the window
+	  (instead of redrawing the whole window)
+
+Bugfixes
+	- fixed races (should no longer crash with BadMatch X11 errors)
+
+Housecleaning
+	- migrated the build script to meson
+	- migrated to the Ayatana AppIndicator library
+	- removed dependency on libinotify (use glib instead)
+	- prepared the code to migrate away from X11
+	  (all X11-specific code now in a separate module)
+
+Other changes
+	- changed the default monitor selection
+	  (the leftmost monitor is now assumed to be the primary monitor
+	  instead of relying on the primary screen as reported by gdk)
+
+
 Version 0.7.1	20/06/2016
 
 Bugfixes:
