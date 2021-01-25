@@ -16,12 +16,12 @@ DEPENDENCIES
 		- meson
 
 	Optional (but recommended):
+		- libayatana-appindicator3
 		- libxdamage
-		- libxext
+		- libxfixes
 		- libxi (>=1.5)
 		- libxrandr
-		- libxfixes
-		- libayatana-appindicator3
+		- libxrender
 
 		- txt2tags gzip  (for the man page)
 
