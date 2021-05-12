@@ -19,7 +19,7 @@ struct config config;
 // State
 gboolean enabled = FALSE;
 gboolean fullscreen = FALSE;
-int raised = 0;
+gboolean raised = FALSE;
 
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
@@ -84,7 +84,7 @@ squint_show()
 {
 	if (!raised)
 	{
-		raised = 1;
+		raised = TRUE;
 		if (fullscreen) {
 			gtk_widget_show(gtkwin);
 		} else {
@@ -96,7 +96,7 @@ squint_show()
 void
 do_hide()
 {
-	raised = 0;
+	raised = FALSE;
 	if (fullscreen) {
 		gtk_widget_hide(gtkwin);
 	} else {

@@ -16,7 +16,7 @@ extern struct config {
 // State
 extern gboolean enabled;
 extern gboolean fullscreen;
-extern int raised;
+extern gboolean raised;
 
 extern GtkWidget* gtkwin;
 extern GdkWindow* gdkwin;
