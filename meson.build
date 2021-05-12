@@ -42,8 +42,8 @@ executable('squint', 'squint.c', 'x11.c', dependencies: deps, install: true)
 install_data('squint.png')
 install_data('squint-disabled.png')
 
-t2t = find_program('txt2tags')
-gzip = find_program('gzip')
+t2t = find_program('txt2tags', required: false)
+gzip = find_program('gzip', required: false)
 
 if t2t.found() and gzip.found()
 	man = custom_target('squint.1',
