@@ -13,18 +13,24 @@
 
 #include "squint.h"
 
+// Config
+struct config config;
+
 // State
 gboolean enabled = FALSE;
 gboolean fullscreen = FALSE;
-static GdkMonitor* src_monitor = NULL;
-static GdkMonitor* dst_monitor = NULL;
+int raised = 0;
 
-
-static GApplication* gtkapp = NULL;
 GtkWidget* gtkwin = NULL;
 GdkWindow* gdkwin = NULL;
 GdkDisplay* gdisplay = NULL;
-int raised = 0;
+
+GdkRectangle src_rect, dst_rect, active_window_rect;
+
+static GdkMonitor* src_monitor = NULL;
+static GdkMonitor* dst_monitor = NULL;
+
+static GApplication* gtkapp = NULL;
 static GdkPixbuf* icon = NULL;
 static GIcon* gicon = NULL;
 

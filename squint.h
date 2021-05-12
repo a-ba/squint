@@ -4,7 +4,7 @@
 
 
 // Config
-struct {
+extern struct config {
 	const char* src_monitor_name;
 	const char* dst_monitor_name;
 
@@ -14,15 +14,15 @@ struct {
 
 
 // State
-gboolean enabled;
-gboolean fullscreen;
-int raised;
+extern gboolean enabled;
+extern gboolean fullscreen;
+extern int raised;
 
-GtkWidget* gtkwin;
-GdkWindow* gdkwin;
-GdkDisplay* gdisplay;
+extern GtkWidget* gtkwin;
+extern GdkWindow* gdkwin;
+extern GdkDisplay* gdisplay;
 
-GdkRectangle src_rect, dst_rect, active_window_rect;
+extern GdkRectangle src_rect, dst_rect, active_window_rect;
 
 void squint_show();
 void squint_hide();
