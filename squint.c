@@ -621,6 +621,9 @@ enable_window()
 		gdk_window_set_events (gdkwin, gdk_window_get_events(gdkwin) | GDK_BUTTON_PRESS_MASK);
 	}
 
+	// do not get the focus when the window is raised
+	gdk_window_set_accept_focus(gdkwin, FALSE);
+
 	// override the cursor icon
 	gdk_window_set_cursor(gdkwin, cursor_icon);
 
