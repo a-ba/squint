@@ -642,23 +642,21 @@ disable_window()
 gboolean
 squint_enable()
 {
-	if (enabled) {
-		return TRUE;
-	}
+	if (!enabled)
+	{
+		if(select_monitors())
+		{
+			enable_window();
 
-	if(!select_monitors()) {
-		return FALSE;
-	}
+			x11_enable();
 
-	enable_window();
-
-	x11_enable();
-
-	enabled = TRUE;
+			enabled = TRUE;
+		}
 #ifdef HAVE_APPINDICATOR
-	refresh_app_indicator();
+		refresh_app_indicator();
 #endif
-	return TRUE;
+	}
+	return enabled;
 }
 
 void
