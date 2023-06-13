@@ -88,7 +88,9 @@ squint_show()
 		if (fullscreen) {
 			gtk_widget_show(gtkwin);
 		} else {
-			gdk_window_raise(gdkwin);
+      if (!config.opt_quiet) {
+        gdk_window_raise(gdkwin);
+      }
 		}
 	}
 }
@@ -100,7 +102,9 @@ do_hide()
 	if (fullscreen) {
 		gtk_widget_hide(gtkwin);
 	} else {
-		gdk_window_lower(gdkwin);
+    if (!config.opt_quiet) {
+      gdk_window_lower(gdkwin);
+    }
 	}
 }
 
@@ -139,6 +143,7 @@ on_window_delete_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 #define ITEM_MASK		0xffffff00
 #define ITEM_ENABLE		(1<<8)
 #define ITEM_FULLSCREEN		(1<<9)
+#define ITEM_QUIET		(1<<14)
 #define ITEM_QUIT		(1<<10)
 #define ITEM_SRC_MONITOR	(1<<11)
 #define ITEM_DST_MONITOR	(1<<12)
@@ -178,7 +183,11 @@ on_menu_item_activate(gpointer pointer, gpointer user_data)
 			squint_enable();
 		}
 		break;
-	
+
+	case ITEM_QUIET:
+		config.opt_quiet = !config.opt_quiet;
+		goto reset;
+
 	case ITEM_FULLSCREEN:
 		config.opt_window = !config.opt_window;
 		goto reset;
@@ -286,12 +295,18 @@ init_app_indicator()
 	gtk_menu_shell_append(menu.shell, item);
 	GtkWidget* enabled_item = item;
 
+	// quiet
+	item = gtk_check_menu_item_new_with_label("Quiet");
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_quiet);
+	connect_menu_item(item, ITEM_QUIET);
+	gtk_menu_shell_append(menu.shell, item);
+
 	// fullscreen
 	item = gtk_check_menu_item_new_with_label("Fullscreen");
 	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_window);
 	connect_menu_item(item, ITEM_FULLSCREEN);
 	gtk_menu_shell_append(menu.shell, item);
-	
+
 	// about
 	item = gtk_menu_item_new_with_label("About");
 	connect_menu_item(item, ITEM_ABOUT);
@@ -340,6 +355,10 @@ refresh_app_indicator()
 			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), enabled);
 			break;
 		case 1:
+			// quiet button
+			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), config.opt_quiet);
+			break;
+		case 2:
 			// fullscreen button
 			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_window);
 			break;
@@ -680,6 +699,7 @@ GOptionEntry option_entries[] = {
   { "rate",	'r',	0,	G_OPTION_ARG_INT,	&config.opt_rate,	"Use fixed refresh rate of N frames per second", "N"},
   { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
   { "window",	'w',	0,	G_OPTION_ARG_NONE,	&config.opt_window,	"Run inside a window instead of going fullscreen", NULL},
+  { "quiet",	'q',	0,	G_OPTION_ARG_NONE,	&config.opt_quiet,	"Do not raise the window on activity", NULL},
   { NULL }
 };
 
