@@ -85,6 +85,10 @@ source=HDMI1, destination=VGA1
 
 Anthony Baire <ayba@free.fr>
 
+= HOMEPAGE =[homepage]
+
+https://github.com/a-ba/squint/
+
 = BUGS =[bugs]
 
 https://github.com/a-ba/squint/issues
