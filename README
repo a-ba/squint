@@ -45,15 +45,14 @@ INSTALLATION
 	https://mesonbuild.com/Running-Meson.html
 	
 USAGE
-	See the man page
-	https://htmlpreview.github.io/?https://github.com/a-ba/squint/blob/master/squint.1.html
+	See the man page at https://a-ba.github.io/squint/
 
 HOMEPAGE
 	https://github.com/a-ba/squint
 
 
 COPYRIGHT
-	(C) 2013-2021 Anthony Baire
+	(C) 2013-2023 Anthony Baire
 
 
 LICENSE

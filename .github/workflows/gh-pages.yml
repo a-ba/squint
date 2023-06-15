@@ -1,0 +1,42 @@
+name: Deploy man page to github-pages
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/gh-pages.yml
+      - squint.1.t2t
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy-pages:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/configure-pages@v3
+      - run: sudo apt-get install -qqy --no-install-recommends txt2tags
+      - run: mkdir github-pages
+      - run: txt2tags -t html -o github-pages/index.html squint.1.t2t
+      - uses: actions/upload-pages-artifact@v1
+        with:
+          path: 'github-pages'
+      - id: deployment
+        uses: actions/deploy-pages@v2
