@@ -293,7 +293,7 @@ init_app_indicator()
 
 	// quiet
 	item = gtk_check_menu_item_new_with_label("Quiet");
-	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_quiet);
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), config.opt_quiet);
 	connect_menu_item(item, ITEM_QUIET);
 	gtk_menu_shell_append(menu.shell, item);
 
