@@ -357,6 +357,9 @@ refresh_app_indicator()
 		case 2:
 			// passive button
 			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), config.opt_passive);
+
+			// disable the button if running in fullscreen mode (because it has no effects)
+			gtk_widget_set_sensitive(item, config.opt_window);
 			break;
 		default:
 			// delete all other GtkTypeCheckMenuItem objects
@@ -692,7 +695,7 @@ squint_disable()
 GOptionEntry option_entries[] = {
   { "disable",	'd',	0,	G_OPTION_ARG_NONE,	&config.opt_disable,	"Do not enable screen duplication at startup", NULL},
   { "limit",	'l',	0,	G_OPTION_ARG_INT,	&config.opt_limit,	"Limit refresh rate to N frames per second", "N"},
-  { "passive",	'p',	0,	G_OPTION_ARG_NONE,	&config.opt_passive,	"Do not raise the window on user activity", NULL},
+  { "passive",	'p',	0,	G_OPTION_ARG_NONE,	&config.opt_passive,	"Do not raise the window on user activity (has no effects in fullscreen mode)", NULL},
   { "rate",	'r',	0,	G_OPTION_ARG_INT,	&config.opt_rate,	"Use fixed refresh rate of N frames per second", "N"},
   { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
   { "window",	'w',	0,	G_OPTION_ARG_NONE,	&config.opt_window,	"Run inside a window instead of going fullscreen", NULL},
