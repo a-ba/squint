@@ -615,9 +615,6 @@ enable_window()
 		gtk_widget_show (gtkwin);
 		gdkwin = gtk_widget_get_window(gtkwin);
 
-		// hide it
-		gdk_window_lower(gdkwin);
-
 		// resize the window
 		int w = src_rect.width;
 		int max_w = dst_rect.width - 100;
