@@ -87,10 +87,8 @@ squint_show()
 		raised = TRUE;
 		if (fullscreen) {
 			gtk_widget_show(gtkwin);
-		} else {
-      if (!config.opt_quiet) {
-        gdk_window_raise(gdkwin);
-      }
+		} else if (!config.opt_quiet) {
+			gdk_window_raise(gdkwin);
 		}
 	}
 }
@@ -101,10 +99,8 @@ do_hide()
 	raised = FALSE;
 	if (fullscreen) {
 		gtk_widget_hide(gtkwin);
-	} else {
-    if (!config.opt_quiet) {
-      gdk_window_lower(gdkwin);
-    }
+	} else if (!config.opt_quiet) {
+		gdk_window_lower(gdkwin);
 	}
 }
 
