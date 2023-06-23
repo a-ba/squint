@@ -8,7 +8,7 @@ extern struct config {
 	const char* src_monitor_name;
 	const char* dst_monitor_name;
 
-	gboolean opt_version, opt_window, opt_disable;
+	gboolean opt_version, opt_window, opt_disable, opt_passive;
 	gint opt_limit, opt_rate;
 } config;
 

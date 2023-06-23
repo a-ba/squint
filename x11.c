@@ -514,6 +514,9 @@ x11_active_window_start_monitoring()
 	if (active_window)
 		x11_active_window_stop_monitoring();
 
+	if (config.opt_passive)
+		return;
+
 	active_window = x11_get_active_window();
 	if (!active_window)
 		return;
@@ -693,7 +696,9 @@ x11_set_xi_eventmask(gboolean active)
 	if (active) {
 		// select for button and key events from all master devices
 		XISetMask(mask1, XI_RawMotion);
-		XISetMask(mask1, XI_RawKeyPress);
+		if (!config.opt_passive) {
+			XISetMask(mask1, XI_RawKeyPress);
+		}
 	}
 
 	evmasks[0].deviceid = XIAllMasterDevices;
@@ -1077,6 +1082,9 @@ void
 x11_enable_focus_tracking()
 {
 	memset(&active_window_rect, 0, sizeof(active_window_rect));
+
+	if (config.opt_passive)
+		return;
 
 	XSetWindowAttributes attr;
 	attr.event_mask = PropertyChangeMask;

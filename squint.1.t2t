@@ -33,6 +33,20 @@ available to do any other stuff.
 do not enable screen duplication at startup. Use this option if you want to start squint automatically at the X session startup
 : **-l N, --limit N**
 limit the refresh rate to N frames per second (default is 50fps), use '-l' 0 to disable limitation (not recommended)
+: **-p, --passive**
+do not raise the window on user activity
+
+In normal mode, squint automatically raises or lowers its window on user
+activity. The window is raised when the activity happens inside the source
+monitor and lowered otherwise.
+
+In passive mode, the window is shown at startup but never raised or lowered
+afterwards. Squint ignores user interactions, it just dumbly duplicates the
+source monitor.
+
+Note: the passive mode is effective only when running in an ordinary window
+(see '-w'). In fullscreen mode this setting is ignored.
+
 : **-r N, --rate N**
 use fixed refresh rate of N frames per second (default to 25fps when the XDamage extension is not available)
 : **-v, --version**
