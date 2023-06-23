@@ -87,10 +87,8 @@ squint_show()
 		raised = TRUE;
 		if (fullscreen) {
 			gtk_widget_show(gtkwin);
-		} else {
-      if (!config.opt_quiet) {
-        gdk_window_raise(gdkwin);
-      }
+		} else if (!config.opt_passive) {
+			gdk_window_raise(gdkwin);
 		}
 	}
 }
@@ -101,10 +99,8 @@ do_hide()
 	raised = FALSE;
 	if (fullscreen) {
 		gtk_widget_hide(gtkwin);
-	} else {
-    if (!config.opt_quiet) {
-      gdk_window_lower(gdkwin);
-    }
+	} else if (!config.opt_passive) {
+		gdk_window_lower(gdkwin);
 	}
 }
 
@@ -143,11 +139,11 @@ on_window_delete_event(GtkWidget* widget, GdkEvent* event, gpointer data)
 #define ITEM_MASK		0xffffff00
 #define ITEM_ENABLE		(1<<8)
 #define ITEM_FULLSCREEN		(1<<9)
-#define ITEM_QUIET		(1<<14)
 #define ITEM_QUIT		(1<<10)
 #define ITEM_SRC_MONITOR	(1<<11)
 #define ITEM_DST_MONITOR	(1<<12)
 #define ITEM_ABOUT		(1<<13)
+#define ITEM_PASSIVE		(1<<14)
 #define ITEM_AUTO		0xff
 
 void
@@ -184,8 +180,8 @@ on_menu_item_activate(gpointer pointer, gpointer user_data)
 		}
 		break;
 
-	case ITEM_QUIET:
-		config.opt_quiet = !config.opt_quiet;
+	case ITEM_PASSIVE:
+		config.opt_passive = !config.opt_passive;
 		goto reset;
 
 	case ITEM_FULLSCREEN:
@@ -295,16 +291,16 @@ init_app_indicator()
 	gtk_menu_shell_append(menu.shell, item);
 	GtkWidget* enabled_item = item;
 
-	// quiet
-	item = gtk_check_menu_item_new_with_label("Quiet");
-	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_quiet);
-	connect_menu_item(item, ITEM_QUIET);
-	gtk_menu_shell_append(menu.shell, item);
-
 	// fullscreen
 	item = gtk_check_menu_item_new_with_label("Fullscreen");
 	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_window);
 	connect_menu_item(item, ITEM_FULLSCREEN);
+	gtk_menu_shell_append(menu.shell, item);
+
+	// passive
+	item = gtk_check_menu_item_new_with_label("Passive");
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), config.opt_passive);
+	connect_menu_item(item, ITEM_PASSIVE);
 	gtk_menu_shell_append(menu.shell, item);
 
 	// about
@@ -355,12 +351,15 @@ refresh_app_indicator()
 			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), enabled);
 			break;
 		case 1:
-			// quiet button
-			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), config.opt_quiet);
-			break;
-		case 2:
 			// fullscreen button
 			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), !config.opt_window);
+			break;
+		case 2:
+			// passive button
+			gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), config.opt_passive);
+
+			// disable the button if running in fullscreen mode (because it has no effects)
+			gtk_widget_set_sensitive(item, config.opt_window);
 			break;
 		default:
 			// delete all other GtkTypeCheckMenuItem objects
@@ -616,9 +615,6 @@ enable_window()
 		gtk_widget_show (gtkwin);
 		gdkwin = gtk_widget_get_window(gtkwin);
 
-		// hide it
-		gdk_window_lower(gdkwin);
-
 		// resize the window
 		int w = src_rect.width;
 		int max_w = dst_rect.width - 100;
@@ -696,10 +692,10 @@ squint_disable()
 GOptionEntry option_entries[] = {
   { "disable",	'd',	0,	G_OPTION_ARG_NONE,	&config.opt_disable,	"Do not enable screen duplication at startup", NULL},
   { "limit",	'l',	0,	G_OPTION_ARG_INT,	&config.opt_limit,	"Limit refresh rate to N frames per second", "N"},
+  { "passive",	'p',	0,	G_OPTION_ARG_NONE,	&config.opt_passive,	"Do not raise the window on user activity (has no effects in fullscreen mode)", NULL},
   { "rate",	'r',	0,	G_OPTION_ARG_INT,	&config.opt_rate,	"Use fixed refresh rate of N frames per second", "N"},
   { "version",	'v',	0,	G_OPTION_ARG_NONE,	&config.opt_version,	"Display version information and exit", NULL},
   { "window",	'w',	0,	G_OPTION_ARG_NONE,	&config.opt_window,	"Run inside a window instead of going fullscreen", NULL},
-  { "quiet",	'q',	0,	G_OPTION_ARG_NONE,	&config.opt_quiet,	"Do not raise the window on activity", NULL},
   { NULL }
 };
 
