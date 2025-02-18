@@ -611,10 +611,6 @@ enable_window()
 			gtk_window_set_icon (GTK_WINDOW(gtkwin), icon);
 		}
 
-		// map my window
-		gtk_widget_show (gtkwin);
-		gdkwin = gtk_widget_get_window(gtkwin);
-
 		// resize the window
 		int w = src_rect.width;
 		int max_w = dst_rect.width - 100;
@@ -626,6 +622,10 @@ enable_window()
 
 		// move the window into the destination screen
 		gtk_window_move(GTK_WINDOW(gtkwin), dst_rect.x+50, dst_rect.y+50);
+
+		// map my window
+		gtk_widget_show (gtkwin);
+		gdkwin = gtk_widget_get_window(gtkwin);
 
 		// register events
 		// - disable on window closed
