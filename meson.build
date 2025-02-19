@@ -2,7 +2,7 @@ project('squint', 'c')
 
 cfg = configuration_data()
 cfg.set_quoted('APPNAME', 'squint')
-cfg.set_quoted('VERSION', '0.8.3')
+cfg.set_quoted('VERSION', '0.9.0')
 cfg.set_quoted('PREFIX', get_option('prefix'))
 
 deps = [
